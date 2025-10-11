@@ -1,0 +1,204 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 15% 97%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 262 76% 65%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 142 85% 42%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 262 79% 58%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 262 76% 65%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 260 33% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 262 76% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 260 33% 94%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 260 33% 92%;
+    --sidebar-ring: 262 76% 65%;
+  }
+
+  .dark {
+    --background: 220 15% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 15% 12%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 15% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 262 76% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 142 85% 42%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 15% 20%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 220 15% 20%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 18%;
+    --ring: 262 76% 65%;
+
+    --sidebar-background: 220 15% 14%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 262 76% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 15% 18%;
+    --sidebar-ring: 262 76% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(220 15% 95%) 100%);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+  }
+}
+
+@layer components {
+  .gradient-purple {
+    @apply bg-gradient-to-br from-[#a28cff] to-[#7E69AB];
+  }
+
+  .gradient-green {
+    @apply bg-gradient-to-br from-[#4ade80] to-[#16a34a];
+  }
+
+  .gradient-orange {
+    @apply bg-gradient-to-br from-[#ff9f5a] to-[#ea580c];
+  }
+
+  .gradient-blue {
+    @apply bg-gradient-to-br from-[#4cc9ff] to-[#0369a1];
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .input-gradient-focus {
+    @apply focus:border-transparent focus:outline-none focus:ring-2 focus:ring-fitfusion-purple focus:ring-opacity-50;
+  }
+  
+  .shiny-button {
+    @apply relative overflow-hidden;
+  }
+  
+  .shiny-button::after {
+    @apply content-[''] absolute top-0 left-0 w-full h-full bg-white opacity-0 transition-opacity;
+    animation: shine 2s infinite;
+  }
+  
+  @keyframes shine {
+    0% { opacity: 0; transform: translateX(-100%) skewX(-15deg); }
+    20% { opacity: 0.2; }
+    100% { opacity: 0; transform: translateX(100%) skewX(-15deg); }
+  }
+  
+  .animated-border {
+    @apply relative;
+  }
+  
+  .animated-border::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #a28cff, #4ade80, #ff9f5a, #4cc9ff);
+    z-index: -1;
+    background-size: 400% 400%;
+    animation: gradient 3s ease infinite;
+    border-radius: calc(var(--radius) + 2px);
+  }
+  
+  @keyframes gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .workout-card-shadow {
+    box-shadow: 0 10px 15px -3px rgba(139, 92, 246, 0.1), 0 4px 6px -2px rgba(139, 92, 246, 0.05);
+  }
+
+  .pulse-animation {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  .floating {
+    animation: floating 3s ease-in-out infinite;
+  }
+
+  @keyframes floating {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+  }
+
+  .vercel-pattern {
+    background-image: radial-gradient(circle at 25px 25px, rgba(0,0,0,.2) 2%, transparent 0%), radial-gradient(circle at 75px 75px, rgba(0,0,0,.2) 2%, transparent 0%);
+    background-size: 100px 100px;
+  }
+
+  .glass-effect {
+    @apply bg-white/70 backdrop-blur-md border border-white/20;
+  }
+}

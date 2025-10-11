@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isValidEmail(email) {
+      return email.matches('.*@.*\\..*');
+    }
+    
+    // User profiles
+    match /profiles/{userId} {
+      allow read, write: if isOwner(userId);
+      allow create: if isAuthenticated() && 
+                      isOwner(userId) && 
+                      request.resource.data.keys().hasAll(['created_at', 'updated_at']);
+      allow update: if isOwner(userId) && 
+                      request.resource.data.updated_at == request.time;
+    }
+    
+    // Anonymous sessions
+    match /anonymous_sessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+      allow create: if request.resource.data.keys().hasAll(['session_token', 'expires_at', 'created_at']) &&
+                      request.resource.data.expires_at > request.time;
+      allow delete: if resource.data.expires_at < request.time; // Allow cleanup of expired sessions
+    }
+    
+    // Workout logs
+    match /workout_logs/{logId} {
+      allow read, write: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) &&
+                      request.resource.data.keys().hasAll(['userId', 'workoutId', 'date', 'created_at']);
+    }
+    
+    // Workout plans
+    match /workout_plans/{planId} {
+      allow read, write: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) &&
+                      request.resource.data.keys().hasAll(['userId', 'title', 'created_at', 'updated_at']);
+      allow update: if isAuthenticated() && 
+                      isOwner(resource.data.userId) &&
+                      request.resource.data.updated_at == request.time;
+    }
+    
+    // User favorites
+    match /user_favorites/{favoriteId} {
+      allow read, write: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) &&
+                      request.resource.data.keys().hasAll(['userId', 'itemId', 'itemType', 'created_at']) &&
+                      request.resource.data.itemType in ['workout', 'recipe'];
+    }
+    
+    // User progress
+    match /user_progress/{progressId} {
+      allow read, write: if isAuthenticated() && isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) &&
+                      request.resource.data.keys().hasAll(['userId', 'date', 'created_at']);
+    }
+    
+    // Public workout templates (read-only for users)
+    match /workout_templates/{templateId} {
+      allow read: if true; // Public read access
+      allow write: if false; // Only admins can write (handled via Cloud Functions)
+    }
+    
+    // Public recipe templates (read-only for users)
+    match /recipe_templates/{recipeId} {
+      allow read: if true; // Public read access
+      allow write: if false; // Only admins can write (handled via Cloud Functions)
+    }
+    
+    // Rate limiting collection
+    match /rate_limits/{identifier} {
+      allow read, write: if false; // Only Cloud Functions can manage this
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "fitfusion-f04d5",
+    "staging": "fitfusion-f04d5-staging",
+    "production": "fitfusion-f04d5"
+  },
+  "targets": {},
+  "etags": {}
+}

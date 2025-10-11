@@ -1,0 +1,110 @@
+
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { UserProvider } from "./contexts/UserContext";
+import Navbar from "./components/navigation/Navbar";
+import Footer from "./components/navigation/Footer";
+import ErrorBoundary from "./components/ErrorBoundary";
+import Home from "./pages/Home";
+import Login from "./pages/Auth/Login";
+import Signup from "./pages/Auth/Signup";
+import Assistant from "./pages/Assistant";
+import Dashboard from "./pages/Dashboard";
+import Recipes from "./pages/Recipes";
+import Workouts from "./pages/Workouts";
+import Community from "./pages/Community";
+import Profile from "./pages/Profile";
+import MonitoringDashboard from "./pages/MonitoringDashboard";
+import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
+import { setupLazyLoading } from "./utils/imageOptimization";
+import { initSentry } from "./utils/sentry";
+import { AnimatePresence } from "framer-motion";
+import PageTransition from "./components/PageTransition";
+import { performanceMonitor } from "./utils/performance";
+import { userBehaviorTracker } from "./utils/userBehaviorTracking";
+import { setupCSP, setupSecurityHeaders } from "./utils/security";
+import { preloadResources } from "./utils/buildOptimization";
+import ErrorFallback from "./components/production/ErrorFallback";
+import { initializeProductionOptimizations } from "./utils/productionOptimizations";
+
+// Create a client
+const queryClient = new QueryClient();
+
+// Initialize Sentry
+if (import.meta.env.PROD) {
+  initSentry();
+}
+
+// Animated page wrapper  
+const AnimatedRoutes = () => {
+  const location = useLocation();
+  
+  // Track page views for analytics
+  useEffect(() => {
+    userBehaviorTracker.trackPageView(location.pathname);
+  }, [location.pathname]);
+  
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+        <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+        <Route path="/signup" element={<PageTransition><Signup /></PageTransition>} />
+        <Route path="/assistant" element={<PageTransition><Assistant /></PageTransition>} />
+        <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
+        <Route path="/recipes" element={<PageTransition><Recipes /></PageTransition>} />
+        <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />
+        <Route path="/community" element={<PageTransition><Community /></PageTransition>} />
+        <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
+        <Route path="/monitoring" element={<PageTransition><MonitoringDashboard /></PageTransition>} />
+        <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
+const App = () => {
+  // Initialize production optimizations
+  useEffect(() => {
+    initializeProductionOptimizations();
+  }, []);
+
+  // Initialize performance monitoring
+  useEffect(() => {
+    console.log('Performance monitoring initialized');
+    
+    return () => {
+      performanceMonitor.cleanup();
+    };
+  }, []);
+  
+  return (
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <UserProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <div className="flex flex-col min-h-screen">
+                <Navbar />
+                <main className="flex-grow">
+                  <ErrorBoundary>
+                    <AnimatedRoutes />
+                  </ErrorBoundary>
+                </main>
+                <Footer />
+              </div>
+            </BrowserRouter>
+          </TooltipProvider>
+        </UserProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
+  );
+};
+
+export default App;
