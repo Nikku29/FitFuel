@@ -15,12 +15,30 @@ export const workoutData: Workout[] = [
     equipment: ['None'],
     benefits: ['Prepares muscles for exercise', 'Increases blood flow', 'Reduces risk of injury'],
     exercises: [
-      { name: 'Jumping Jacks', duration: '3 mins', description: 'Full-body activation exercise, suitable for home or gym' },
-      { name: 'Arm & Leg Swings', duration: '3 mins', description: 'Dynamic joint mobility exercise for shoulders and hips' },
-      { name: 'High Knees', duration: '4 mins', description: 'Raises heart rate and warms lower body effectively' }
+      {
+        name: 'Jumping Jacks',
+        duration: '1 min',
+        sets: 2,
+        restTime: 30,
+        description: 'Full-body activation. Jump feet wide while clapping hands overhead.'
+      },
+      {
+        name: 'Arm & Leg Swings',
+        duration: '45 sec',
+        sets: 2,
+        restTime: 15,
+        description: 'Dynamic swings to loosen up shoulders and hips.'
+      },
+      {
+        name: 'High Knees',
+        duration: '1 min',
+        sets: 2,
+        restTime: 30,
+        description: 'Run in place bringing knees as high as possible.'
+      }
     ]
   },
-  
+
   // Cardio Workouts
   {
     id: 2,
@@ -40,7 +58,7 @@ export const workoutData: Workout[] = [
       { name: 'HIIT Intervals', duration: '5 mins', description: '30 seconds work, 15 seconds rest' }
     ]
   },
-  
+
   // Chest Workouts
   {
     id: 3,
@@ -61,7 +79,7 @@ export const workoutData: Workout[] = [
       { name: 'Decline Push-Ups', duration: '8 mins', description: 'Targets lower chest muscles' }
     ]
   },
-  
+
   // Back Workouts
   {
     id: 4,
@@ -82,7 +100,7 @@ export const workoutData: Workout[] = [
       { name: 'Renegade Rows', duration: '8 mins', description: 'Compound movement that works back and core simultaneously' }
     ]
   },
-  
+
   // Shoulder Workouts
   {
     id: 5,
@@ -103,7 +121,7 @@ export const workoutData: Workout[] = [
       { name: 'Reverse Flyes', duration: '7 mins', description: 'Targets rear delts to complete 3D shoulder development' }
     ]
   },
-  
+
   // Arms Workouts
   {
     id: 6,
@@ -117,14 +135,49 @@ export const workoutData: Workout[] = [
     equipment: ['Dumbbells (optional)', 'Chair for dips'],
     benefits: ['Builds arm strength', 'Improves elbow joint stability', 'Enhances upper body appearance'],
     exercises: [
-      { name: 'Bicep Curls', duration: '8 mins', description: 'Classic bicep exercise for gym or home with dumbbells' },
-      { name: 'Chair Dips', duration: '8 mins', description: 'Effective tricep builder using just a chair at home' },
-      { name: 'Hammer Curls', duration: '9 mins', description: 'Works biceps and forearms, can be done with dumbbells' },
-      { name: 'Diamond Push-Ups', duration: '7 mins', description: 'Bodyweight exercise targeting triceps' },
-      { name: 'Concentration Curls', duration: '7 mins', description: 'Isolation exercise for bicep peak development' }
+      {
+        name: 'Bicep Curls',
+        reps: '12-15',
+        sets: 3,
+        restTime: 45,
+        weightGuidance: 'Medium Dumbbells',
+        description: 'Keep elbows tucked, curl weight up with control.'
+      },
+      {
+        name: 'Chair Dips',
+        reps: '10-12',
+        sets: 3,
+        restTime: 45,
+        weightGuidance: 'Bodyweight',
+        description: 'Lower until elbows are at 90 degrees, then press up.'
+      },
+      {
+        name: 'Hammer Curls',
+        reps: '12',
+        sets: 3,
+        restTime: 45,
+        weightGuidance: 'Medium Dumbbells',
+        description: 'Palms facing each other, targets brachialis and forearms.'
+      },
+      {
+        name: 'Diamond Push-Ups',
+        reps: '8-10',
+        sets: 3,
+        restTime: 60,
+        weightGuidance: 'Bodyweight',
+        description: 'Hands close together under chest to target triceps.'
+      },
+      {
+        name: 'Concentration Curls',
+        reps: '12',
+        sets: 2,
+        restTime: 30,
+        weightGuidance: 'Light/Medium Dumbbells',
+        description: 'Seated, elbow on inner thigh. Focus on the squeeze.'
+      }
     ]
   },
-  
+
   // Core/Abs Workouts
   {
     id: 7,
@@ -145,7 +198,7 @@ export const workoutData: Workout[] = [
       { name: 'Bicycle Crunches', duration: '5 mins', description: 'Engages multiple core muscles simultaneously' }
     ]
   },
-  
+
   // Legs Workouts
   {
     id: 8,
@@ -166,7 +219,7 @@ export const workoutData: Workout[] = [
       { name: 'Calf Raises', duration: '8 mins', description: 'Targets calf muscles for complete lower body development' }
     ]
   },
-  
+
   // Glutes Workouts
   {
     id: 9,
@@ -187,7 +240,7 @@ export const workoutData: Workout[] = [
       { name: 'Hip Thrusts', duration: '8 mins', description: 'Advanced glute exercise with greater range of motion than bridges' }
     ]
   },
-  
+
   // HIIT/Full Body Workouts
   {
     id: 10,
@@ -208,7 +261,7 @@ export const workoutData: Workout[] = [
       { name: 'High Knees', duration: '5 mins', description: 'Cardio exercise that targets the core and elevates heart rate' }
     ]
   },
-  
+
   // Yoga Session
   {
     id: 11,
@@ -229,7 +282,7 @@ export const workoutData: Workout[] = [
       { name: 'Shavasana', duration: '5 mins', description: 'Final relaxation pose to absorb the benefits of the practice' }
     ]
   },
-  
+
   // Recovery/Mobility Session
   {
     id: 12,

@@ -29,7 +29,11 @@ export interface UserProfile {
 
 export interface Exercise {
   name: string;
-  duration: string;
+  duration?: string; // Optional if reps are used
+  reps?: string;
+  sets?: number;
+  restTime?: number; // In seconds
+  weightGuidance?: string; // e.g., "Bodyweight", "Light", "Heavy"
   description: string;
   instructions?: string[];
   targetMuscles?: string[];

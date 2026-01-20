@@ -1,13 +1,13 @@
 
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
   getDocs,
   addDoc,
   Timestamp
@@ -15,20 +15,31 @@ import {
 import { db } from './config';
 import { UserProfile, AnonymousSession } from './types';
 
-// Profile operations
+// Profile operations replaced by 'users' collection standardization
 export const getProfile = async (userId: string): Promise<UserProfile | null> => {
   try {
-    const docRef = doc(db, 'profiles', userId);
+    const docRef = doc(db, 'users', userId);
     const docSnap = await getDoc(docRef);
-    
+
     if (docSnap.exists()) {
       const data = docSnap.data();
-      return { 
-        id: docSnap.id, 
-        ...data,
-        created_at: data.created_at?.toDate() || undefined,
-        updated_at: data.updated_at?.toDate() || undefined
-      } as UserProfile;
+      // Map 'users' schema back to 'UserProfile' interface expected by frontend
+      return {
+        id: docSnap.id,
+        full_name: data.displayName || data.full_name,
+        email: data.email,
+        username: data.username,
+        dob: data.dob,
+        gender: data.gender,
+        weight_kg: data.weight || data.weight_kg,
+        height_cm: data.height || data.height_cm,
+        location: data.location,
+        fitness_goal: data.fitnessGoal || data.fitness_goal,
+        fitness_level: data.activityLevel || data.fitness_level,
+        diet_preference: data.dietaryPreference || data.diet_preference,
+        created_at: data.createdAt?.toDate ? data.createdAt.toDate() : undefined,
+        updated_at: data.updatedAt?.toDate ? data.updatedAt.toDate() : undefined
+      } as any;
     }
     return null;
   } catch (error) {
@@ -39,12 +50,12 @@ export const getProfile = async (userId: string): Promise<UserProfile | null> =>
 
 export const createProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   try {
-    const docRef = doc(db, 'profiles', userId);
+    const docRef = doc(db, 'users', userId);
+    // Merge provided data, preferring camelCase for new standard but supporting legacy keys
     await setDoc(docRef, {
       ...profileData,
-      created_at: Timestamp.now(),
-      updated_at: Timestamp.now()
-    });
+      updatedAt: Timestamp.now()
+    }, { merge: true });
     return { error: null };
   } catch (error) {
     console.error('Error creating profile:', error);
@@ -54,11 +65,11 @@ export const createProfile = async (userId: string, profileData: Partial<UserPro
 
 export const updateProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   try {
-    const docRef = doc(db, 'profiles', userId);
-    await updateDoc(docRef, {
+    const docRef = doc(db, 'users', userId);
+    await setDoc(docRef, {
       ...profileData,
-      updated_at: Timestamp.now()
-    });
+      updatedAt: Timestamp.now()
+    }, { merge: true }); // Use setDoc with merge to ensure it works even if document doesn't exist
     return { error: null };
   } catch (error) {
     console.error('Error updating profile:', error);
@@ -84,17 +95,17 @@ export const createAnonymousSession = async (sessionData: Omit<AnonymousSession,
 export const getAnonymousSession = async (sessionToken: string): Promise<AnonymousSession | null> => {
   try {
     const q = query(
-      collection(db, 'anonymous_sessions'), 
+      collection(db, 'anonymous_sessions'),
       where('session_token', '==', sessionToken),
       where('expires_at', '>', Timestamp.now())
     );
     const querySnapshot = await getDocs(q);
-    
+
     if (!querySnapshot.empty) {
       const docData = querySnapshot.docs[0];
       const data = docData.data();
-      return { 
-        id: docData.id, 
+      return {
+        id: docData.id,
         ...data,
         expires_at: data.expires_at.toDate(),
         created_at: data.created_at.toDate()
@@ -175,14 +186,14 @@ export const getUserWorkoutLogs = async (userId: string, limit: number = 50) => 
       // limitQuery(limit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     const logs = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       date: doc.data().date.toDate(),
       created_at: doc.data().created_at?.toDate()
     })) as WorkoutLog[];
-    
+
     return { logs, error: null };
   } catch (error) {
     console.error('Error fetching workout logs:', error);
@@ -232,14 +243,14 @@ export const getUserWorkoutPlans = async (userId: string) => {
       where('userId', '==', userId)
     );
     const querySnapshot = await getDocs(q);
-    
+
     const plans = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       created_at: doc.data().created_at?.toDate(),
       updated_at: doc.data().updated_at?.toDate()
     })) as WorkoutPlan[];
-    
+
     return { plans, error: null };
   } catch (error) {
     console.error('Error fetching workout plans:', error);
@@ -279,11 +290,11 @@ export const removeFromFavorites = async (userId: string, itemId: string, itemTy
       where('itemType', '==', itemType)
     );
     const querySnapshot = await getDocs(q);
-    
+
     if (!querySnapshot.empty) {
       await deleteDoc(querySnapshot.docs[0].ref);
     }
-    
+
     return { error: null };
   } catch (error) {
     console.error('Error removing from favorites:', error);
@@ -297,19 +308,19 @@ export const getUserFavorites = async (userId: string, itemType?: string) => {
       collection(db, 'user_favorites'),
       where('userId', '==', userId)
     );
-    
+
     if (itemType) {
       q = query(q, where('itemType', '==', itemType));
     }
-    
+
     const querySnapshot = await getDocs(q);
-    
+
     const favorites = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       created_at: doc.data().created_at?.toDate()
     })) as UserFavorite[];
-    
+
     return { favorites, error: null };
   } catch (error) {
     console.error('Error fetching favorites:', error);
@@ -369,14 +380,14 @@ export const getUserProgress = async (userId: string, limit: number = 50) => {
       // limitQuery(limit)
     );
     const querySnapshot = await getDocs(q);
-    
+
     const progress = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
       date: doc.data().date.toDate(),
       created_at: doc.data().created_at?.toDate()
     })) as UserProgress[];
-    
+
     return { progress, error: null };
   } catch (error) {
     console.error('Error fetching user progress:', error);

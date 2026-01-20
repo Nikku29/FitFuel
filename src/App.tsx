@@ -18,6 +18,8 @@ import Workouts from "./pages/Workouts";
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import MonitoringDashboard from "./pages/MonitoringDashboard";
+import AIOnboarding from "./pages/AIOnboarding";
+import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 import { setupLazyLoading } from "./utils/imageOptimization";
@@ -42,14 +44,15 @@ if (import.meta.env.PROD) {
 // Animated page wrapper  
 const AnimatedRoutes = () => {
   const location = useLocation();
-  
+
   // Track page views for analytics
   useEffect(() => {
     userBehaviorTracker.trackPageView(location.pathname);
   }, [location.pathname]);
-  
+
   return (
     <AnimatePresence mode="wait">
+      {/* @ts-ignore - Routes key is required for AnimatePresence to work correctly */}
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<PageTransition><Home /></PageTransition>} />
         <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
@@ -60,7 +63,9 @@ const AnimatedRoutes = () => {
         <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />
         <Route path="/community" element={<PageTransition><Community /></PageTransition>} />
         <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
+        <Route path="/subscription" element={<PageTransition><Subscription /></PageTransition>} />
         <Route path="/monitoring" element={<PageTransition><MonitoringDashboard /></PageTransition>} />
+        <Route path="/ai-onboarding" element={<PageTransition><AIOnboarding /></PageTransition>} />
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
       </Routes>
     </AnimatePresence>
@@ -76,12 +81,12 @@ const App = () => {
   // Initialize performance monitoring
   useEffect(() => {
     console.log('Performance monitoring initialized');
-    
+
     return () => {
       performanceMonitor.cleanup();
     };
   }, []);
-  
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

@@ -22,6 +22,21 @@ const ErrorTracker: React.FC = () => {
   const [errors, setErrors] = useState<ErrorInfo[]>([]);
   const [filter, setFilter] = useState<'all' | 'unresolved'>('unresolved');
 
+  const determineSeverity = (message: string): ErrorInfo['severity'] => {
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes('network') || lowerMessage.includes('fetch')) {
+      return 'medium';
+    }
+    if (lowerMessage.includes('auth') || lowerMessage.includes('permission')) {
+      return 'high';
+    }
+    if (lowerMessage.includes('crash') || lowerMessage.includes('fatal')) {
+      return 'critical';
+    }
+    return 'low';
+  };
+
   useEffect(() => {
     // Set up global error handlers
     const handleError = (event: ErrorEvent) => {
@@ -66,20 +81,6 @@ const ErrorTracker: React.FC = () => {
     };
   }, []);
 
-  const determineSeverity = (message: string): ErrorInfo['severity'] => {
-    const lowerMessage = message.toLowerCase();
-    
-    if (lowerMessage.includes('network') || lowerMessage.includes('fetch')) {
-      return 'medium';
-    }
-    if (lowerMessage.includes('auth') || lowerMessage.includes('permission')) {
-      return 'high';
-    }
-    if (lowerMessage.includes('crash') || lowerMessage.includes('fatal')) {
-      return 'critical';
-    }
-    return 'low';
-  };
 
   const getSeverityColor = (severity: ErrorInfo['severity']) => {
     switch (severity) {
@@ -92,8 +93,8 @@ const ErrorTracker: React.FC = () => {
   };
 
   const markAsResolved = (errorId: string) => {
-    setErrors(prev => 
-      prev.map(error => 
+    setErrors(prev =>
+      prev.map(error =>
         error.id === errorId ? { ...error, resolved: true } : error
       )
     );
@@ -103,7 +104,7 @@ const ErrorTracker: React.FC = () => {
     setErrors(prev => prev.filter(error => error.id !== errorId));
   };
 
-  const filteredErrors = errors.filter(error => 
+  const filteredErrors = errors.filter(error =>
     filter === 'all' || !error.resolved
   );
 
@@ -121,7 +122,7 @@ const ErrorTracker: React.FC = () => {
           <Bug className="w-6 h-6" />
           Error Tracker
         </h2>
-        
+
         <div className="flex gap-2">
           <Button
             variant={filter === 'unresolved' ? 'default' : 'outline'}
@@ -211,7 +212,7 @@ const ErrorTracker: React.FC = () => {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <Badge className={`${getSeverityColor(error.severity)} text-white`}>
                       {error.severity}
@@ -224,13 +225,13 @@ const ErrorTracker: React.FC = () => {
                   </div>
                 </div>
               </CardHeader>
-              
+
               <CardContent className="space-y-4">
                 <div className="text-sm text-gray-600">
                   <p><strong>URL:</strong> {error.url}</p>
                   <p><strong>User Agent:</strong> {error.userAgent.substring(0, 100)}...</p>
                 </div>
-                
+
                 {error.stack && (
                   <Alert>
                     <AlertDescription>
@@ -243,7 +244,7 @@ const ErrorTracker: React.FC = () => {
                     </AlertDescription>
                   </Alert>
                 )}
-                
+
                 <div className="flex gap-2">
                   {!error.resolved && (
                     <Button

@@ -1,4 +1,3 @@
-
 export interface UserProfile {
   id: string;
   email?: string;
@@ -9,6 +8,7 @@ export interface UserProfile {
   dob?: string;
   height_cm?: number;
   weight_kg?: number;
+  body_type?: 'Ectomorph' | 'Mesomorph' | 'Endomorph' | string;
   location?: string;
   diet_preference?: string;
   fitness_level?: string;
@@ -27,6 +27,7 @@ export interface AnonymousSession {
   weight_kg?: number;
   age?: number;
   gender?: string;
+  body_type?: 'Ectomorph' | 'Mesomorph' | 'Endomorph' | string;
   location?: string;
   diet_preference?: string;
   fitness_level?: string;

@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { aiService, DashboardInsights } from '@/services/aiService';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  Activity, 
-  Calendar, 
-  Target, 
+import {
+  Activity,
+  Calendar,
+  Target,
   Trophy,
   Flame,
   Timer,
@@ -24,12 +24,23 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import FoodCamera from '@/components/calories/FoodCamera';
+import CalorieAnalysisResult from '@/components/calories/CalorieAnalysisResult';
+import { useToast } from '@/hooks/use-toast';
 
 const Dashboard = () => {
   const { userData } = useUser();
   const [aiInsights, setAiInsights] = useState<DashboardInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+
+  // AI Scanner State
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const { toast } = useToast();
 
   // Sample data for display
   const weeklyProgress = [
@@ -60,7 +71,7 @@ const Dashboard = () => {
   useEffect(() => {
     const config = aiService.getConfigurationStatus();
     setAiConfigured(config.configured);
-    
+
     if (config.configured && userData) {
       generateInsights();
     }
@@ -68,7 +79,7 @@ const Dashboard = () => {
 
   const generateInsights = async () => {
     if (!aiConfigured || !userData || loadingInsights) return;
-    
+
     setLoadingInsights(true);
     try {
       const progressData = {
@@ -79,7 +90,7 @@ const Dashboard = () => {
         achievements: achievements.filter(a => a.earned),
         stats
       };
-      
+
       const insights = await aiService.generateDashboardInsights(userData, progressData);
       setAiInsights(insights);
     } catch (error) {
@@ -87,6 +98,39 @@ const Dashboard = () => {
     } finally {
       setLoadingInsights(false);
     }
+  };
+
+  const handleCapture = async (imageSrc: string) => {
+    setScannedImage(imageSrc);
+    setIsAnalyzing(true);
+
+    try {
+      const result = await aiService.analyzeFoodImage(imageSrc);
+      setAnalysisResult(result);
+    } catch (error) {
+      toast({
+        title: "Analysis Failed",
+        description: "Could not analyze the image. Please try again.",
+        variant: "destructive"
+      });
+      setScannedImage(null);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleResetScan = () => {
+    setScannedImage(null);
+    setAnalysisResult(null);
+  };
+
+  const handleLogMeal = () => {
+    toast({
+      title: "Meal Logged!",
+      description: `Logged ${analysisResult.calories} kcal for ${analysisResult.foodName}.`,
+    });
+    setIsScannerOpen(false);
+    handleResetScan();
   };
 
   const getGoalColor = (goal: string) => {
@@ -134,7 +178,7 @@ const Dashboard = () => {
   const getPersonalizedRecommendation = () => {
     const isVegetarian = userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Vegan';
     const isVegan = userData.dietaryPreference === 'Vegan';
-    
+
     if (userData.fitnessGoal === 'Weight Loss') {
       return {
         title: "Weight Loss Focus",
@@ -143,7 +187,7 @@ const Dashboard = () => {
         color: "border-fitfusion-red"
       };
     }
-    
+
     if (userData.fitnessGoal === 'Muscle Gain') {
       return {
         title: "Muscle Building",
@@ -152,7 +196,7 @@ const Dashboard = () => {
         color: "border-fitfusion-purple"
       };
     }
-    
+
     return {
       title: "General Fitness",
       description: "Balanced workout routine with varied exercises and nutritious meals",
@@ -212,11 +256,10 @@ const Dashboard = () => {
               <div className="grid grid-cols-7 gap-2">
                 {weeklyProgress.map((day, index) => (
                   <div key={index} className="text-center">
-                    <div className={`w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-medium ${
-                      day.completed 
-                        ? 'bg-fitfusion-green text-white' 
+                    <div className={`w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-medium ${day.completed
+                        ? 'bg-fitfusion-green text-white'
                         : 'bg-gray-200 text-gray-600'
-                    }`}>
+                      }`}>
                       {day.completed ? '✓' : day.day[0]}
                     </div>
                     <p className="text-xs text-gray-500">{day.day}</p>
@@ -254,7 +297,7 @@ const Dashboard = () => {
                   </div>
                 </div>
               )}
-              
+
               {userData.activityLevel && (
                 <div className="flex items-center gap-3">
                   <div className="bg-fitfusion-orange w-10 h-10 rounded-full flex items-center justify-center">
@@ -413,17 +456,15 @@ const Dashboard = () => {
               {achievements.map((achievement, index) => {
                 const Icon = achievement.icon;
                 return (
-                  <div 
-                    key={index} 
-                    className={`p-4 rounded-lg border-2 text-center transition-all duration-300 ${
-                      achievement.earned 
-                        ? 'border-fitfusion-yellow bg-fitfusion-yellow/10' 
+                  <div
+                    key={index}
+                    className={`p-4 rounded-lg border-2 text-center transition-all duration-300 ${achievement.earned
+                        ? 'border-fitfusion-yellow bg-fitfusion-yellow/10'
                         : 'border-gray-200 bg-gray-50 opacity-60'
-                    }`}
+                      }`}
                   >
-                    <div className={`w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center ${
-                      achievement.earned ? 'bg-fitfusion-yellow' : 'bg-gray-300'
-                    }`}>
+                    <div className={`w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center ${achievement.earned ? 'bg-fitfusion-yellow' : 'bg-gray-300'
+                      }`}>
                       <Icon className={`h-6 w-6 ${achievement.earned ? 'text-white' : 'text-gray-600'}`} />
                     </div>
                     <h3 className="font-semibold text-sm">{achievement.title}</h3>
@@ -465,6 +506,33 @@ const Dashboard = () => {
               </CardContent>
             </Card>
           </Link>
+
+          <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
+            <DialogTrigger asChild>
+              <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group border-2 hover:border-fitfusion-purple/50">
+                <CardContent className="p-6 text-center">
+                  <div className="bg-gradient-to-br from-purple-500 to-indigo-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform shadow-lg">
+                    <Sparkles className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-purple-700">Scan Meal (AI)</h3>
+                  <p className="text-sm text-gray-600">Instant calorie analysis</p>
+                </CardContent>
+              </Card>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-slate-950 border-slate-800">
+              {analysisResult ? (
+                <div className="p-4 bg-slate-50">
+                  <CalorieAnalysisResult
+                    data={analysisResult}
+                    onReset={handleResetScan}
+                    onLog={handleLogMeal}
+                  />
+                </div>
+              ) : (
+                <FoodCamera onCapture={handleCapture} onCancel={() => setIsScannerOpen(false)} />
+              )}
+            </DialogContent>
+          </Dialog>
 
           <Link to="/assistant">
             <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">

@@ -12,9 +12,13 @@ import WorkoutBenefits from './WorkoutBenefits';
 import WorkoutEquipment from './WorkoutEquipment';
 import WorkoutProgress from './WorkoutProgress';
 
+import { Play } from 'lucide-react';
+import { ActiveWorkoutSession } from './ActiveWorkoutSession';
+
 interface WorkoutDetailModalProps {
   selectedWorkout: any;
   onClose: () => void;
+  // ... other props can be optional or ignored if we use local state for the session
   exerciseInstructions: Record<string, string[]>;
   time: number;
   isRunning: boolean;
@@ -41,6 +45,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
 }) => {
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showActiveSession, setShowActiveSession] = useState(false);
 
   const toggleInstructions = () => {
     setShowInstructions(!showInstructions);
@@ -48,7 +53,8 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
 
   const calculateTotalDuration = (exercises: any[]) => {
     return exercises.reduce((total, exercise) => {
-      const minutes = parseInt(exercise.duration.split(' ')[0]);
+      const duration = exercise.duration || "0";
+      const minutes = parseInt(duration.split(' ')[0]) || 0;
       return total + minutes;
     }, 0);
   };
@@ -56,7 +62,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
   // Get instructions for current exercise or general instructions if not found
   const getCurrentExerciseInstructions = () => {
     if (!selectedWorkout) return [];
-    
+
     const currentExercise = selectedWorkout.exercises[activeExerciseIndex].name;
     return exerciseInstructions[currentExercise] || [
       "Start in the proper position as described for this exercise.",
@@ -68,18 +74,31 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
 
   if (!selectedWorkout) return null;
 
+  if (showActiveSession) {
+    return (
+      <ActiveWorkoutSession
+        workout={selectedWorkout}
+        onComplete={() => {
+          setShowActiveSession(false);
+          // Optional: Mark as complete in backend here
+        }}
+        onClose={() => setShowActiveSession(false)}
+      />
+    );
+  }
+
   const modalVariants = {
     hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
+    visible: {
+      opacity: 1,
       scale: 1,
-      transition: { 
+      transition: {
         duration: 0.3,
         staggerChildren: 0.1
       }
     },
-    exit: { 
-      opacity: 0, 
+    exit: {
+      opacity: 0,
       scale: 0.95,
       transition: { duration: 0.2 }
     }
@@ -87,7 +106,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
 
   return (
     <AnimatePresence>
-      <motion.div 
+      <motion.div
         className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -96,7 +115,7 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
           if (e.target === e.currentTarget) onClose();
         }}
       >
-        <motion.div 
+        <motion.div
           className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
           variants={modalVariants}
           initial="hidden"
@@ -104,33 +123,35 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
           exit="exit"
           onClick={(e) => e.stopPropagation()}
         >
-          <WorkoutInfoHeader 
+          <WorkoutInfoHeader
             workout={selectedWorkout}
           />
-          
+
           <div className="p-6">
             <QuoteDisplay workoutType={selectedWorkout.type} className="mb-4" />
-            
-            {/* Timer Section */}
-            <WorkoutTimer
-              isBreakTime={isBreakTime}
-              breakTime={breakTime}
-              time={time}
-              isRunning={isRunning}
-              onStart={startTimer}
-              onPause={pauseTimer}
-              onStop={stopTimer}
-              onBreak={startBreakTimer}
-            />
-            
+
+            <div className="flex justify-center mb-8">
+              <MotionButton
+                onClick={() => setShowActiveSession(true)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="bg-gradient-to-r from-fitfuel-purple to-pink-600 text-white px-8 py-6 rounded-full text-lg font-bold shadow-lg hover:shadow-xl flex items-center gap-2"
+              >
+                <Play className="fill-current" /> START GUIDED SESSION
+              </MotionButton>
+            </div>
+
+            {/* Legacy Timer Section - Optional/Compact */}
+            {/* ... */}
+
             {/* Equipment Section */}
             <WorkoutEquipment equipment={selectedWorkout.equipment} />
-            
+
             {/* Benefits Section */}
             <WorkoutBenefits benefits={selectedWorkout.benefits} />
-            
+
             <div className="mb-8">
-              <motion.h3 
+              <motion.h3
                 className="text-lg font-semibold mb-4"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -138,15 +159,15 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
               >
                 Workout Flow
               </motion.h3>
-              
+
               {/* Progress Section */}
-              <WorkoutProgress 
+              <WorkoutProgress
                 activeExerciseIndex={activeExerciseIndex}
                 totalExercises={selectedWorkout.exercises.length}
                 calculateTotalDuration={calculateTotalDuration}
                 exercises={selectedWorkout.exercises}
               />
-              
+
               <ExerciseView
                 exercise={selectedWorkout.exercises[activeExerciseIndex]}
                 activeExerciseIndex={activeExerciseIndex}
@@ -159,15 +180,15 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
                 startBreakTimer={startBreakTimer}
               />
             </div>
-            
+
             <div className="flex justify-end">
-              <MotionButton 
+              <MotionButton
                 onClick={onClose}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-purple-600 hover:bg-purple-700 text-white"
+                className="bg-gray-200 hover:bg-gray-300 text-gray-800"
               >
-                Close Workout
+                Close View
               </MotionButton>
             </div>
           </div>

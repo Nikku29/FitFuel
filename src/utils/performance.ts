@@ -30,7 +30,7 @@ class PerformanceMonitor {
     if (typeof window !== 'undefined' && 'PerformanceObserver' in window) {
       this.observer = new PerformanceObserver((list) => {
         const entries = list.getEntries();
-        
+
         entries.forEach((entry) => {
           this.trackMetric({
             name: entry.name,
@@ -42,8 +42,8 @@ class PerformanceMonitor {
       });
 
       // Observe navigation and resource timing
-      this.observer.observe({ 
-        entryTypes: ['navigation', 'resource', 'measure', 'paint'] 
+      this.observer.observe({
+        entryTypes: ['navigation', 'resource', 'measure', 'paint']
       });
     }
   }
@@ -61,7 +61,7 @@ class PerformanceMonitor {
 
   private trackCLS() {
     let clsValue = 0;
-    let clsEntries: any[] = [];
+    const clsEntries: any[] = [];
 
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
@@ -137,10 +137,10 @@ class PerformanceMonitor {
 
   private trackTTFB() {
     const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-    
+
     if (navigationEntry) {
       const ttfb = navigationEntry.responseStart - navigationEntry.requestStart;
-      
+
       this.trackWebVital({
         name: 'TTFB',
         value: ttfb,
@@ -163,7 +163,7 @@ class PerformanceMonitor {
 
   trackCustomTiming(name: string, startTime: number, endTime?: number) {
     const value = endTime ? endTime - startTime : performance.now() - startTime;
-    
+
     this.trackMetric({
       name,
       value,
@@ -223,7 +223,7 @@ export const performanceMonitor = new PerformanceMonitor();
 // Utility functions for manual performance tracking
 export const startTimer = (name: string): (() => void) => {
   const startTime = performance.now();
-  
+
   return () => {
     performanceMonitor.trackCustomTiming(name, startTime);
   };

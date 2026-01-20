@@ -1,5 +1,6 @@
 import { WORKOUT_PROMPT, NUTRITION_PROMPT, DASHBOARD_PROMPT } from '@/config/aiPrompts';
 import { UserData } from '@/contexts/UserContextTypes';
+import { agenticEngine } from './AgenticEngine';
 
 export interface AIRecommendation {
   id?: string;
@@ -61,28 +62,48 @@ class AIService {
   private baseURL: string = '';
 
   constructor() {
-    // Try different API keys in order of preference
-    this.apiKey = import.meta.env.VITE_OPENAI_API_KEY || 
-                  import.meta.env.VITE_DEEPSEEK_API_KEY || 
-                  null;
-    
+    this.apiKey = import.meta.env.VITE_OPENAI_API_KEY ||
+      import.meta.env.VITE_GEMINI_API_KEY ||
+      import.meta.env.VITE_DEEPSEEK_API_KEY ||
+      null;
+
     if (import.meta.env.VITE_OPENAI_API_KEY) {
       this.baseURL = 'https://api.openai.com/v1';
+    } else if (import.meta.env.VITE_GEMINI_API_KEY) {
+      this.baseURL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
     } else if (import.meta.env.VITE_DEEPSEEK_API_KEY) {
       this.baseURL = 'https://api.deepseek.com/v1';
     }
   }
 
   private isConfigured(): boolean {
-    return this.apiKey !== null && this.baseURL !== '';
+    return this.apiKey !== null;
   }
 
-  private async makeRequest(messages: any[], maxTokens: number = 1000): Promise<string> {
-    if (!this.isConfigured()) {
-      throw new Error('AI service not configured. Please add your API key to environment variables.');
+  private async makeRequest(messages: any[], maxTokens: number = 1000, modelOverride?: string): Promise<string> {
+    if (!this.apiKey) {
+      console.warn("AI Service running in DEMO MODE (No API Key).");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const lastMessage = messages[messages.length - 1].content;
+      if (typeof lastMessage === 'string' && lastMessage.includes('recipe')) return JSON.stringify(this.getFallbackRecipes({} as any));
+      if (typeof lastMessage === 'string' && lastMessage.includes('workout')) return JSON.stringify(this.getFallbackWorkouts({} as any));
+      return "I am F.I.C.E. Since no API key is configured, I am running in demo mode.";
     }
 
     try {
+      if (this.baseURL.includes('googleapis')) {
+        const lastMsg = messages[messages.length - 1].content;
+        const response = await fetch(`${this.baseURL}?key=${this.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: typeof lastMsg === 'string' ? lastMsg : JSON.stringify(lastMsg) }] }] })
+        });
+        if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+        const data = await response.json();
+        return data.candidates[0].content.parts[0].text;
+      }
+
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -90,17 +111,14 @@ class AIService {
           'Authorization': `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
-          model: import.meta.env.VITE_OPENAI_API_KEY ? 'gpt-3.5-turbo' : 'deepseek-chat',
+          model: modelOverride || (import.meta.env.VITE_OPENAI_API_KEY ? 'gpt-3.5-turbo' : 'deepseek-chat'),
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
-      }
-
+      if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
       return data.choices[0]?.message?.content || '';
     } catch (error) {
@@ -109,111 +127,114 @@ class AIService {
     }
   }
 
-  async generatePersonalizedWorkouts(userData: UserData, count: number = 3): Promise<PersonalizedWorkout[]> {
-    const userProfile = this.buildUserProfile(userData);
-    
-    const messages = [
-      { role: 'system', content: WORKOUT_PROMPT },
-      { 
-        role: 'user', 
-        content: `Generate ${count} personalized workout recommendations for this user profile: ${userProfile}. Return as valid JSON array.` 
-      }
-    ];
+  // Public generic chat method
+  async chat(messages: any[]): Promise<string> {
+    return this.makeRequest(messages, 1500);
+  }
 
+  async generatePersonalizedWorkouts(userData: UserData, count: number = 3): Promise<PersonalizedWorkout[]> {
+    console.log("Delegating to Agentic Engine for Workouts...");
     try {
-      const response = await this.makeRequest(messages, 2000);
-      const workouts = this.parseJSONResponse(response) as PersonalizedWorkout[];
-      return workouts.map((workout, index) => ({
-        ...workout,
-        id: `ai-workout-${Date.now()}-${index}`
-      }));
+      const result = await agenticEngine.runWorkflow(userData, 'generate_workout');
+      if (!result) throw new Error("Agentic Engine returned null");
+
+      return [{
+        id: result.id || `ai-workout-${Date.now()}`,
+        title: result.title,
+        description: result.focus || "AI Optimized Session",
+        duration: "45-60 min",
+        difficulty: userData.activityLevel || "Intermediate",
+        category: "Personalized",
+        exercises: result.exercises || [],
+        benefits: ["Bio-Mechanically Matched", "Goal Aligned", "Recovery Aware"],
+        equipment: ["Dynamic"],
+        calories: 300
+      } as PersonalizedWorkout];
     } catch (error) {
-      console.error('Error generating workouts:', error);
+      console.error('Agentic Engine Generation Failed:', error);
       return this.getFallbackWorkouts(userData);
     }
   }
 
-  async generatePersonalizedRecipes(userData: UserData, count: number = 6): Promise<PersonalizedRecipe[]> {
-    const userProfile = this.buildUserProfile(userData);
-    
-    const messages = [
-      { role: 'system', content: NUTRITION_PROMPT },
-      { 
-        role: 'user', 
-        content: `Generate ${count} personalized recipe recommendations for this user profile: ${userProfile}. Include variety across breakfast, lunch, dinner, and snacks. Return as valid JSON array.` 
-      }
-    ];
-
+  async generatePersonalizedRecipes(userData: UserData, count: number = 6, ingredients?: string): Promise<PersonalizedRecipe[]> {
+    console.log("Delegating to Agentic Engine for Nutrition...");
     try {
-      const response = await this.makeRequest(messages, 2500);
-      const recipes = this.parseJSONResponse(response) as PersonalizedRecipe[];
-      return recipes.map((recipe, index) => ({
-        ...recipe,
-        id: `ai-recipe-${Date.now()}-${index}`
-      }));
+      const result = await agenticEngine.runWorkflow(userData, 'generate_meal');
+      if (!result) throw new Error("Agentic Engine returned null");
+
+      return [{
+        id: result.id || `ai-recipe-${Date.now()}`,
+        title: result.title || "Chef's Special",
+        description: result.description || "Macronutrient matched meal.",
+        prepTime: "20 mins",
+        calories: result.calories || 500,
+        category: "lunch",
+        dietaryType: "non-vegetarian",
+        tags: ["Agentic Choice", "Bio-Availabile"],
+        ingredients: result.ingredients || [],
+        steps: result.steps || [],
+        nutritionFacts: result.nutritionFacts || { protein: 30, carbs: 40, fat: 15, fiber: 5 }
+      } as PersonalizedRecipe];
     } catch (error) {
-      console.error('Error generating recipes:', error);
+      console.error('Agentic Engine Recipe Failed:', error);
       return this.getFallbackRecipes(userData);
     }
   }
 
-  async generateDashboardInsights(userData: UserData, progressData: any): Promise<DashboardInsights> {
-    const userProfile = this.buildUserProfile(userData);
-    const progressSummary = JSON.stringify(progressData);
-    
+  async analyzeFoodImage(base64Image: string): Promise<any> {
+    if (!import.meta.env.VITE_OPENAI_API_KEY) {
+      console.warn("Vision features require OpenAI Key. Returning mock.");
+      return this.getFallbackFoodAnalysis();
+    }
+
     const messages = [
-      { role: 'system', content: DASHBOARD_PROMPT },
-      { 
-        role: 'user', 
-        content: `Generate personalized dashboard insights for this user: ${userProfile}. Their progress data: ${progressSummary}. Return as valid JSON object.` 
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Analyze this image. Return valid JSON with foodName, calories, protein, carbs, fat." },
+          { type: "image_url", image_url: { url: base64Image } }
+        ]
       }
     ];
 
     try {
-      const response = await this.makeRequest(messages, 800);
-      const insights = this.parseJSONResponse(response) as DashboardInsights;
-      return insights;
+      const response = await this.makeRequest(messages, 500, "gpt-4o");
+      return this.parseJSONResponse(response);
     } catch (error) {
-      console.error('Error generating insights:', error);
-      return this.getFallbackInsights(userData);
+      console.error("Vision Analysis Failed:", error);
+      return this.getFallbackFoodAnalysis();
     }
   }
 
-  private buildUserProfile(userData: UserData): string {
-    const profile = {
-      goal: userData.fitnessGoal || 'General Fitness',
-      level: userData.activityLevel || 'Beginner',
-      diet: userData.dietaryPreference || 'No preference',
-      age: userData.age || 'Not specified',
-      height: userData.height ? `${userData.height}cm` : 'Not specified',
-      weight: userData.weight ? `${userData.weight}kg` : 'Not specified',
-      experience: userData.experienceLevel || 'Beginner',
-      preferences: {
-        workoutDuration: userData.preferredWorkoutDuration || '30-45 minutes',
-        equipment: userData.availableEquipment || 'Basic home equipment',
-        timeOfDay: userData.preferredWorkoutTime || 'Flexible',
-      }
+  private getFallbackFoodAnalysis() {
+    return {
+      foodName: "Detected Food (Mock)",
+      calories: 350,
+      protein: 20,
+      carbs: 45,
+      fat: 10,
+      confidence: 0.85
     };
-    
-    return JSON.stringify(profile);
+  }
+
+  async generateDashboardInsights(userData: UserData, progressData: any): Promise<DashboardInsights> {
+    // Keep legacy or upgrade later
+    return this.getFallbackInsights(userData);
+  }
+
+  private buildUserProfile(userData: UserData): string {
+    return JSON.stringify(userData);
   }
 
   private parseJSONResponse(response: string): any {
     try {
-      // Clean up the response to extract JSON
       let cleanResponse = response.trim();
-      
-      // Remove markdown code blocks if present
       cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-      
-      // Find the JSON content
       const jsonStart = cleanResponse.indexOf('[') !== -1 ? cleanResponse.indexOf('[') : cleanResponse.indexOf('{');
       const jsonEnd = cleanResponse.lastIndexOf(']') !== -1 ? cleanResponse.lastIndexOf(']') + 1 : cleanResponse.lastIndexOf('}') + 1;
-      
       if (jsonStart !== -1 && jsonEnd !== -1) {
         cleanResponse = cleanResponse.substring(jsonStart, jsonEnd);
       }
-      
       return JSON.parse(cleanResponse);
     } catch (error) {
       console.error('Failed to parse JSON response:', response);
@@ -222,80 +243,53 @@ class AIService {
   }
 
   private getFallbackWorkouts(userData: UserData): PersonalizedWorkout[] {
-    const baseWorkouts = [
-      {
-        id: `fallback-workout-${Date.now()}-1`,
-        title: `${userData.fitnessGoal || 'Fitness'} Starter Routine`,
-        description: `A beginner-friendly routine tailored for ${userData.fitnessGoal?.toLowerCase() || 'general fitness'}`,
-        duration: '25-30 mins',
-        difficulty: userData.activityLevel || 'Beginner',
-        category: 'full-body',
-        exercises: [
-          { name: 'Warm-up', duration: '5 mins', description: 'Light cardio and dynamic stretching', targetMuscles: ['full-body'] },
-          { name: 'Bodyweight Squats', reps: '10-15', sets: '3', description: 'Basic squat movement', targetMuscles: ['legs', 'glutes'] },
-          { name: 'Push-ups', reps: '5-10', sets: '3', description: 'Modified as needed', targetMuscles: ['chest', 'arms'] },
-          { name: 'Plank Hold', duration: '30 seconds', sets: '3', description: 'Core strengthening', targetMuscles: ['core'] },
-        ],
-        benefits: ['Builds foundation strength', 'Improves mobility', 'Low impact'],
-        equipment: ['None required'],
-        calories: 150,
-      }
-    ];
-
-    return baseWorkouts;
+    return [{
+      id: 'fallback-1',
+      title: 'Basic Foundation',
+      description: 'Fallback routine due to connection error.',
+      duration: '30 min',
+      difficulty: 'Beginner',
+      category: 'General',
+      exercises: [],
+      benefits: ['Movement'],
+      equipment: ['None'],
+      calories: 100
+    }];
   }
 
   private getFallbackRecipes(userData: UserData): PersonalizedRecipe[] {
-    const isVeg = userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Vegan';
-    
-    const baseRecipes = [
-      {
-        id: `fallback-recipe-${Date.now()}-1`,
-        title: isVeg ? 'Protein-Rich Chickpea Bowl' : 'Grilled Chicken Power Bowl',
-        description: `Nutritious ${userData.fitnessGoal?.toLowerCase() || 'fitness'} meal`,
-        prepTime: '20 mins',
-        calories: 450,
-        category: 'lunch' as const,
-        dietaryType: isVeg ? 'vegetarian' as const : 'non-vegetarian' as const,
-        tags: ['high-protein', 'nutrient-dense', 'meal-prep'],
-        ingredients: isVeg 
-          ? ['Chickpeas', 'Quinoa', 'Spinach', 'Avocado', 'Lemon', 'Olive Oil'] 
-          : ['Chicken Breast', 'Brown Rice', 'Broccoli', 'Sweet Potato', 'Herbs'],
-        steps: [
-          'Prepare your protein source',
-          'Cook grains according to package instructions', 
-          'Steam or sauté vegetables',
-          'Combine all ingredients in a bowl',
-          'Season and serve'
-        ],
-        nutritionFacts: { protein: 35, carbs: 45, fat: 15, fiber: 8 }
-      }
-    ];
-
-    return baseRecipes;
+    return [{
+      id: 'fallback-meal',
+      title: 'Simple Meal',
+      description: 'Fallback meal due to connection error.',
+      prepTime: '5 min',
+      calories: 400,
+      category: 'lunch',
+      dietaryType: 'vegetarian',
+      tags: ['Quick'],
+      ingredients: ['Apple'],
+      steps: ['Eat'],
+      nutritionFacts: { protein: 0, carbs: 20, fat: 0, fiber: 2 }
+    }];
   }
 
   private getFallbackInsights(userData: UserData): DashboardInsights {
     return {
-      personalizedTip: `Focus on consistency with your ${userData.fitnessGoal?.toLowerCase() || 'fitness'} journey. Small daily actions lead to big results!`,
-      recommendedAction: 'Try adding 5 minutes to your next workout session.',
-      progressAnalysis: 'You\'re building great habits! Keep up the momentum.',
-      motivationalMessage: 'Every workout counts towards your stronger, healthier self!'
+      personalizedTip: 'Keep moving!',
+      recommendedAction: 'Drink water',
+      progressAnalysis: 'Steady progress',
+      motivationalMessage: 'You got this'
     };
   }
 
-  // Check if AI service is available
   isAvailable(): boolean {
     return this.isConfigured();
   }
 
-  // Get configuration status for UI
   getConfigurationStatus(): { configured: boolean; provider: string | null } {
-    if (import.meta.env.VITE_OPENAI_API_KEY) {
-      return { configured: true, provider: 'OpenAI' };
-    } else if (import.meta.env.VITE_DEEPSEEK_API_KEY) {
-      return { configured: true, provider: 'DeepSeek' };
-    }
+    if (import.meta.env.VITE_GEMINI_API_KEY) return { configured: true, provider: 'Google Gemini' };
+    if (import.meta.env.VITE_OPENAI_API_KEY) return { configured: true, provider: 'OpenAI' };
+    if (import.meta.env.VITE_DEEPSEEK_API_KEY) return { configured: true, provider: 'DeepSeek' };
     return { configured: false, provider: null };
   }
 }

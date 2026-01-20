@@ -14,7 +14,8 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fitfusion-f04d5.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "251737656018",
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:251737656018:web:19d0d8c218a9faf6b8bb0b",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-Y2RCMQMWFQ"
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-Y2RCMQMWFQ",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL
 };
 
 // Initialize Firebase

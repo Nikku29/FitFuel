@@ -21,6 +21,7 @@ export interface UserData {
   allergies?: string;
   medicalConditions?: string;
   activityRestrictions?: string;
+  bodyType?: 'Ectomorph' | 'Mesomorph' | 'Endomorph' | string;
 }
 
 export interface UserProfile {
@@ -69,4 +70,5 @@ export const initialUserData: UserData = {
   allergies: '',
   medicalConditions: '',
   activityRestrictions: '',
+  bodyType: '',
 };

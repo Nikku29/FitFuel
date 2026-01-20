@@ -10,6 +10,10 @@
     --background: 220 15% 97%;
     --foreground: 222.2 84% 4.9%;
 
+    /* Fluid Typography */
+    --font-fluid-base: clamp(1rem, 5vw, 2.5rem);
+    --font-fluid-sm: clamp(0.875rem, 3vw, 1rem);
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
 

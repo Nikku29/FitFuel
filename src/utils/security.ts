@@ -6,12 +6,12 @@ export const setupCSP = () => {
 
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://apis.google.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: https: blob:",
-    "connect-src 'self' https://api.openai.com https://*.supabase.co wss://*.supabase.co",
-    "frame-src 'none'",
+    "img-src 'self' data: https: blob: https://*.googleusercontent.com",
+    "connect-src 'self' https://api.openai.com https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com",
+    "frame-src 'self' https://*.firebaseapp.com https://*.firebase.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -78,21 +78,21 @@ class RateLimiter {
   isAllowed(key: string, maxAttempts: number = 5, windowMs: number = 60000): boolean {
     const now = Date.now();
     const windowStart = now - windowMs;
-    
+
     if (!this.attempts.has(key)) {
       this.attempts.set(key, []);
     }
-    
+
     const keyAttempts = this.attempts.get(key)!;
-    
+
     // Remove old attempts outside the window
     const validAttempts = keyAttempts.filter(time => time > windowStart);
     this.attempts.set(key, validAttempts);
-    
+
     if (validAttempts.length >= maxAttempts) {
       return false;
     }
-    
+
     // Add current attempt
     validAttempts.push(now);
     return true;
@@ -111,7 +111,7 @@ export const secureStorage = {
       console.error('Failed to store item securely:', error);
     }
   },
-  
+
   getItem: (key: string) => {
     try {
       const encrypted = localStorage.getItem(key);
@@ -122,7 +122,7 @@ export const secureStorage = {
       return null;
     }
   },
-  
+
   removeItem: (key: string) => {
     localStorage.removeItem(key);
   }

@@ -507,6 +507,7 @@ const RecipePage = () => {
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAiRecipes, setShowAiRecipes] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [ingredientsInput, setIngredientsInput] = useState('');
 
   // Check AI configuration on component mount
   useEffect(() => {
@@ -517,10 +518,10 @@ const RecipePage = () => {
   // Generate AI recipes when user data is available
   const generateAiRecipes = async () => {
     if (!aiConfigured || !userData || loadingAi) return;
-    
+
     setLoadingAi(true);
     try {
-      const personalizedRecipes = await aiService.generatePersonalizedRecipes(userData, 6);
+      const personalizedRecipes = await aiService.generatePersonalizedRecipes(userData, 6, ingredientsInput);
       setAiRecipes(personalizedRecipes);
       setShowAiRecipes(true);
       toast({
@@ -545,10 +546,10 @@ const RecipePage = () => {
 
   // Filter recipes based on search term and active tab
   const filteredRecipes = allRecipes.filter(recipe => {
-    const matchesSearch = recipe.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         recipe.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         recipe.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+    const matchesSearch = recipe.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      recipe.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      recipe.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+
     if (currentTab === 'all') return matchesSearch;
     if (currentTab === 'veg') return matchesSearch && recipe.dietaryType === 'vegetarian';
     if (currentTab === 'non-veg') return matchesSearch && recipe.dietaryType === 'non-vegetarian';
@@ -556,7 +557,7 @@ const RecipePage = () => {
     if (currentTab === 'lunch') return matchesSearch && recipe.category === 'lunch';
     if (currentTab === 'dinner') return matchesSearch && recipe.category === 'dinner';
     if (currentTab === 'snack') return matchesSearch && recipe.category === 'snack';
-    
+
     return matchesSearch;
   });
 
@@ -581,44 +582,54 @@ const RecipePage = () => {
           {aiConfigured ? (
             <Card className="border-2 border-fitfuel-purple/20 bg-gradient-to-r from-purple-50 to-blue-50">
               <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="bg-fitfuel-purple p-2 rounded-lg">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <div className="flex items-start space-x-3 max-w-xl">
+                    <div className="bg-fitfuel-purple p-2 rounded-lg mt-1">
                       <Sparkles className="h-6 w-6 text-white" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">AI-Personalized Recipes</h3>
-                      <p className="text-gray-600 text-sm">
-                        Get recipes tailored to your {userData?.fitnessGoal?.toLowerCase() || 'fitness'} goals and {userData?.dietaryPreference || 'dietary'} preferences
-                      </p>
+                    <div className="space-y-3 w-full">
+                      <div>
+                        <h3 className="font-semibold text-lg">AI-Personalized Chef</h3>
+                        <p className="text-gray-600 text-sm">
+                          Tell us what ingredients you have, or let us surprise you based on your {userData?.fitnessGoal?.toLowerCase() || 'fitness'} goals.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="e.g., chicken, spinach, rice (optional)"
+                          className="bg-white border-purple-200"
+                          value={ingredientsInput}
+                          onChange={(e) => setIngredientsInput(e.target.value)}
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
                     {!showAiRecipes && (
-                      <Button 
+                      <Button
                         onClick={generateAiRecipes}
                         disabled={loadingAi || !userData}
-                        className="bg-fitfuel-purple hover:bg-fitfuel-purple/90"
+                        className="bg-fitfuel-purple hover:bg-fitfuel-purple/90 w-full sm:w-auto"
                       >
                         {loadingAi ? (
                           <>
                             <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                            Generating...
+                            Cheffing it up...
                           </>
                         ) : (
                           <>
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Generate AI Recipes
+                            Generate Recipes
                           </>
                         )}
                       </Button>
                     )}
                     {showAiRecipes && (
-                      <Button 
+                      <Button
                         onClick={generateAiRecipes}
                         disabled={loadingAi}
                         variant="outline"
-                        className="border-fitfuel-purple text-fitfuel-purple hover:bg-fitfuel-purple/10"
+                        className="border-fitfuel-purple text-fitfuel-purple hover:bg-fitfuel-purple/10 w-full sm:w-auto"
                       >
                         {loadingAi ? 'Regenerating...' : 'Regenerate'}
                       </Button>
@@ -672,9 +683,9 @@ const RecipePage = () => {
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative w-full md:w-1/3">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-              <Input 
-                placeholder="Search recipes..." 
-                className="pl-10" 
+              <Input
+                placeholder="Search recipes..."
+                className="pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -697,68 +708,30 @@ const RecipePage = () => {
             {filteredRecipes.length > 0 ? (
               filteredRecipes.map((recipe) => (
                 <Card key={recipe.id} className="overflow-hidden hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-                  <div className="h-48 overflow-hidden">
-                    {recipe.image ? (
-                      <img 
-                        src={recipe.image} 
-                        alt={recipe.title} 
-                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                      />
+                  <div className="h-48 bg-gradient-to-br from-purple-50 to-blue-50 p-6 flex flex-col justify-center items-center text-center space-y-2 border-b">
+                    {String(recipe.id).startsWith('ai-') ? (
+                      <Sparkles className="h-10 w-10 text-fitfuel-purple mb-2" />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-fitfuel-purple/20 to-blue-50 flex items-center justify-center">
-                        {recipe.id?.startsWith('ai-') && (
-                          <div className="text-center">
-                            <Sparkles className="h-12 w-12 text-fitfuel-purple mx-auto mb-2" />
-                            <p className="text-fitfuel-purple font-medium text-sm">AI Generated</p>
-                          </div>
-                        )}
+                      <div className="h-10 w-10 bg-white rounded-full flex items-center justify-center shadow-sm mb-2">
+                        {recipe.category === 'breakfast' && <span className="text-2xl">🍳</span>}
+                        {recipe.category === 'lunch' && <span className="text-2xl">🥗</span>}
+                        {recipe.category === 'dinner' && <span className="text-2xl">🥘</span>}
+                        {recipe.category === 'snack' && <span className="text-2xl">🍎</span>}
                       </div>
                     )}
+                    <h3 className="font-heading font-bold text-xl text-gray-800 line-clamp-2 px-2">
+                      {recipe.title}
+                    </h3>
                   </div>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle className="text-xl">{recipe.title}</CardTitle>
-                      <div className="flex gap-1 flex-wrap">
-                        {recipe.id?.startsWith('ai-') && (
-                          <Badge variant="secondary" className="bg-fitfuel-purple text-white text-xs">
-                            <Sparkles className="h-3 w-3 mr-1" />
-                            AI
-                          </Badge>
-                        )}
-                        <Badge variant={recipe.dietaryType === 'vegetarian' ? 'outline' : 'destructive'} className="text-xs">
-                          {recipe.dietaryType === 'vegetarian' ? 'Veg' : 'Non-Veg'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <CardDescription className="line-clamp-2">{recipe.description}</CardDescription>
+
+                  <CardHeader className="pt-4 pb-2">
+                    <CardDescription className="line-clamp-2 mt-2">{recipe.description}</CardDescription>
                   </CardHeader>
-                  <CardContent className="pb-2">
-                    <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <Clock size={14} className="mr-1" />
-                        <span>{recipe.prepTime}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Flame size={14} className="mr-1" />
-                        <span>{recipe.calories} cal</span>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {recipe.tags.slice(0, 3).map((tag, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
+
                   <CardFooter>
-                    <Button 
-                      variant="outline" 
-                      className="w-full" 
-                      onClick={() => setSelectedRecipe(recipe)}
-                    >
+                    <Button variant="outline" className="w-full" onClick={() => setSelectedRecipe(recipe)}>
                       <BookOpen className="mr-2 h-4 w-4" />
-                      View Recipe
+                      View Details
                     </Button>
                   </CardFooter>
                 </Card>
@@ -770,85 +743,110 @@ const RecipePage = () => {
             )}
           </div>
         </div>
-      </div>
 
-      {/* Recipe Detail Modal */}
-      {selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
-            <div className="h-64 w-full overflow-hidden">
-              {selectedRecipe.image ? (
-                <img 
-                  src={selectedRecipe.image} 
-                  alt={selectedRecipe.title} 
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-fitfuel-purple/20 to-blue-50 flex items-center justify-center">
-                  {selectedRecipe.id?.startsWith('ai-') && (
-                    <div className="text-center">
-                      <Sparkles className="h-16 w-16 text-fitfuel-purple mx-auto mb-3" />
-                      <p className="text-fitfuel-purple font-medium text-lg">AI Generated Recipe</p>
-                      <p className="text-gray-600 text-sm">Personalized for your goals</p>
+
+        {/* Recipe Detail Modal */}
+        {
+          selectedRecipe && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-300 shadow-2xl">
+                {/* Header Section (No Image) */}
+                <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-8">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h2 className="text-3xl font-heading font-bold mb-2">{selectedRecipe.title}</h2>
+                      <p className="text-purple-100 text-lg opacity-90">{selectedRecipe.description}</p>
                     </div>
-                  )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-white hover:bg-white/20 -mt-2 -mr-2"
+                      onClick={() => setSelectedRecipe(null)}
+                    >
+                      <span className="text-2xl">&times;</span>
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 mt-6">
+                    <div className="flex items-center bg-white/20 backdrop-blur-md px-4 py-2 rounded-lg">
+                      <Flame className="h-5 w-5 mr-2 text-orange-300" />
+                      <span className="font-bold">{selectedRecipe.calories} kcal</span>
+                    </div>
+                    <div className="flex items-center bg-white/20 backdrop-blur-md px-4 py-2 rounded-lg">
+                      <Clock className="h-5 w-5 mr-2 text-blue-200" />
+                      <span className="font-bold">{selectedRecipe.prepTime}</span>
+                    </div>
+                    <div className="flex items-center bg-white/20 backdrop-blur-md px-4 py-2 rounded-lg">
+                      <span className="mr-2 text-xl">🍽️</span>
+                      <span className="capitalize">{selectedRecipe.dietaryType}</span>
+                    </div>
+                  </div>
                 </div>
-              )}
+
+                <div className="p-8 grid md:grid-cols-2 gap-8">
+                  {/* Ingredients Column */}
+                  <div>
+                    <h3 className="text-xl font-bold mb-4 flex items-center text-gray-800">
+                      <span className="bg-purple-100 p-1.5 rounded-md mr-2">🥬</span>
+                      Ingredients & Requirements
+                    </h3>
+                    <Card className="border-purple-100 shadow-sm">
+                      <CardContent className="p-0">
+                        <ul className="divide-y divide-purple-50">
+                          {selectedRecipe.ingredients.map((ingredient: string, idx: number) => (
+                            <li key={idx} className="flex items-center p-3 hover:bg-purple-50/50 transition-colors text-gray-700">
+                              <div className="h-1.5 w-1.5 bg-purple-400 rounded-full mr-3"></div>
+                              {ingredient}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    <div className="mt-6">
+                      <h4 className="font-semibold text-gray-700 mb-2">Nutritional Breakdown (est.)</h4>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-orange-50 p-2 rounded-lg border border-orange-100">
+                          <div className="text-sm text-gray-500">Protein</div>
+                          <div className="font-bold text-orange-700">High</div>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg border border-green-100">
+                          <div className="text-sm text-gray-500">Carbs</div>
+                          <div className="font-bold text-green-700">Moderate</div>
+                        </div>
+                        <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
+                          <div className="text-sm text-gray-500">Fats</div>
+                          <div className="font-bold text-blue-700">Low</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Steps Column */}
+                  <div>
+                    <h3 className="text-xl font-bold mb-4 flex items-center text-gray-800">
+                      <span className="bg-purple-100 p-1.5 rounded-md mr-2">👨‍🍳</span>
+                      Preparation Steps
+                    </h3>
+                    <div className="space-y-4">
+                      {selectedRecipe.steps.map((step: string, idx: number) => (
+                        <div key={idx} className="flex gap-4">
+                          <div className="flex-shrink-0 h-8 w-8 bg-fitfuel-purple text-white rounded-full flex items-center justify-center font-bold text-sm shadow-md">
+                            {idx + 1}
+                          </div>
+                          <p className="text-gray-600 leading-relaxed pt-1">{step}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
             </div>
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-2xl font-bold">{selectedRecipe.title}</h2>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedRecipe.id?.startsWith('ai-') && (
-                    <Badge variant="secondary" className="bg-fitfuel-purple text-white">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      AI Generated
-                    </Badge>
-                  )}
-                  <Badge variant={selectedRecipe.dietaryType === 'vegetarian' ? 'outline' : 'destructive'}>
-                    {selectedRecipe.dietaryType === 'vegetarian' ? 'Vegetarian' : 'Non-Vegetarian'}
-                  </Badge>
-                </div>
-              </div>
-              
-              <p className="text-gray-600 mb-4">{selectedRecipe.description}</p>
-              
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="flex items-center">
-                  <Clock size={16} className="mr-2 text-fitfuel-purple" />
-                  <span>{selectedRecipe.prepTime}</span>
-                </div>
-                <div className="flex items-center">
-                  <Flame size={16} className="mr-2 text-fitfuel-purple" />
-                  <span>{selectedRecipe.calories} calories</span>
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-2">Ingredients</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  {selectedRecipe.ingredients.map((ingredient: string, index: number) => (
-                    <li key={index}>{ingredient}</li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Instructions</h3>
-                <ol className="list-decimal pl-5 space-y-2">
-                  {selectedRecipe.steps.map((step: string, index: number) => (
-                    <li key={index} className="pl-1">{step}</li>
-                  ))}
-                </ol>
-              </div>
-              
-              <div className="mt-8 flex justify-end">
-                <Button onClick={() => setSelectedRecipe(null)}>Close</Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          )
+        }
+
+      </div>
     </div>
   );
 };
