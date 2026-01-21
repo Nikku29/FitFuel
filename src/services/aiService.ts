@@ -82,13 +82,9 @@ class AIService {
 
   private async makeRequest(messages: any[], maxTokens: number = 1000, modelOverride?: string): Promise<string> {
     if (!this.apiKey) {
-      console.warn("AI Service running in DEMO MODE (No API Key).");
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const lastMessage = messages[messages.length - 1].content;
-      if (typeof lastMessage === 'string' && lastMessage.includes('recipe')) return JSON.stringify(this.getFallbackRecipes({} as any));
-      if (typeof lastMessage === 'string' && lastMessage.includes('workout')) return JSON.stringify(this.getFallbackWorkouts({} as any));
-      return "I am F.I.C.E. Since no API key is configured, I am running in demo mode.";
+      console.error("AI Service Error: No API Key found for OpenAI, Gemini, or DeepSeek.");
+      // Throw explicit error so UI knows to switch to Local ML or prompt user
+      throw new Error("MISSING_PROVIDER: No AI API configured. Please check .env or use local features.");
     }
 
     try {
@@ -118,11 +114,24 @@ class AIService {
         }),
       });
 
+      if (response.status === 429) {
+        console.warn("AI Quota Exceeded (429). Switching to Rule-Based Engine.");
+        // Fallback Logic based on content context
+        const lastMsg = messages[messages.length - 1].content;
+        if (typeof lastMsg === 'string' && lastMsg.includes('recipe')) return JSON.stringify(this.getFallbackRecipes({} as any));
+        if (typeof lastMsg === 'string' && lastMsg.includes('workout')) return JSON.stringify(this.getFallbackWorkouts({} as any));
+        return "I am currently at capacity. Please try again later or use the offline tools.";
+      }
+
       if (!response.ok) throw new Error(`API error: ${response.status}`);
       const data = await response.json();
       return data.choices[0]?.message?.content || '';
-    } catch (error) {
+    } catch (error: any) {
       console.error('AI API Error:', error);
+      if (error.message?.includes('429')) {
+        // Double safety catch
+        return "QUOTA_EXCEEDED";
+      }
       throw new Error(`Failed to get AI response: ${error}`);
     }
   }
@@ -132,7 +141,7 @@ class AIService {
     return this.makeRequest(messages, 1500);
   }
 
-  async generatePersonalizedWorkouts(userData: UserData, count: number = 3): Promise<PersonalizedWorkout[]> {
+  async generatePersonalizedWorkouts(userData: UserData, count: number = 3, mode: 'strict_profile' | 'guest' = 'strict_profile'): Promise<PersonalizedWorkout[]> {
     console.log("Delegating to Agentic Engine for Workouts...");
     try {
       const result = await agenticEngine.runWorkflow(userData, 'generate_workout');
@@ -156,11 +165,67 @@ class AIService {
     }
   }
 
+  /**
+   * Generate content from natural language search query
+   * Supports both guest mode (query-only) and profile mode (query + profile constraints)
+   */
+  async generateFromNaturalLanguage(
+    userData: UserData | null,
+    query: string,
+    type: 'workout' | 'recipe',
+    mode: 'strict_profile' | 'guest' = 'guest'
+  ): Promise<PersonalizedWorkout[] | PersonalizedRecipe[]> {
+    const isGuest = mode === 'guest' || !userData;
+
+    // Build profile-aware system prompt
+    const profileContext = isGuest ? '' : `
+USER PROFILE:
+- Diet: ${userData.dietaryPreference} (STRICTLY RESPECT - NO EXCEPTIONS)
+- Fitness Level: ${userData.activityLevel}
+- Medical Conditions: ${userData.medicalConditions || 'None'}
+- Allergies: ${userData.allergies || 'None'}
+- Goal: ${userData.fitnessGoal}
+
+CONSTRAINTS:
+- If Vegetarian: NEVER suggest meat, fish, eggs
+- If Vegan: ONLY plant-based ingredients
+- If knee injury: NO jumping, squats, lunges
+- Respect fitness level (don't suggest advanced moves to beginners)
+`;
+
+    const systemPrompt = `You are an elite ${type === 'workout' ? 'personal trainer' : 'nutritionist'}.
+${profileContext}
+USER REQUEST: "${query}"
+
+Return valid JSON matching the schema. Be creative but safe.`;
+
+    try {
+      if (type === 'workout') {
+        return await this.generatePersonalizedWorkouts(userData || ({} as UserData), 1, mode);
+      } else {
+        return await this.generatePersonalizedRecipes(userData || ({} as UserData), 1, query);
+      }
+    } catch (error) {
+      console.error(`Failed to generate ${type} from query:`, error);
+      return type === 'workout'
+        ? this.getFallbackWorkouts(userData || ({} as UserData))
+        : this.getFallbackRecipes(userData || ({} as UserData));
+    }
+  }
+
   async generatePersonalizedRecipes(userData: UserData, count: number = 6, ingredients?: string): Promise<PersonalizedRecipe[]> {
     console.log("Delegating to Agentic Engine for Nutrition...");
     try {
       const result = await agenticEngine.runWorkflow(userData, 'generate_meal');
       if (!result) throw new Error("Agentic Engine returned null");
+
+      // Enforce dietary restrictions based on profile
+      let dietaryType: 'vegetarian' | 'non-vegetarian' | 'vegan' = 'non-vegetarian';
+      if (userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Eggetarian') {
+        dietaryType = 'vegetarian';
+      } else if (userData.dietaryPreference === 'Vegan') {
+        dietaryType = 'vegan';
+      }
 
       return [{
         id: result.id || `ai-recipe-${Date.now()}`,
@@ -169,8 +234,8 @@ class AIService {
         prepTime: "20 mins",
         calories: result.calories || 500,
         category: "lunch",
-        dietaryType: "non-vegetarian",
-        tags: ["Agentic Choice", "Bio-Availabile"],
+        dietaryType: dietaryType, // Profile-enforced
+        tags: ["Agentic Choice", "Bio-Availabile", userData.dietaryPreference || "Custom"],
         ingredients: result.ingredients || [],
         steps: result.steps || [],
         nutritionFacts: result.nutritionFacts || { protein: 30, carbs: 40, fat: 15, fiber: 5 }

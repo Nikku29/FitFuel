@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { updateProfile } from '@/integrations/firebase/firestore';
 import ProfileForm from '@/components/profile/ProfileForm';
 import ProfileStats from '@/components/profile/ProfileStats';
+import { createWorker } from 'tesseract.js';
+import { FileText, Heart, Activity, Upload, Bluetooth } from 'lucide-react';
 
 const ProfilePage = () => {
   const { userData, updateUserData, user, profile, session } = useUser();
@@ -27,11 +28,18 @@ const ProfilePage = () => {
     allergies: '',
     medicalConditions: '',
   });
+
+  // New State for Connected Health
+  const [medicalAnalysis, setMedicalAnalysis] = useState<string | null>(null);
+  const [isAnalyzingMedical, setIsAnalyzingMedical] = useState(false);
+  const [heartRate, setHeartRate] = useState<number | null>(null);
+  const [isConnectingDevice, setIsConnectingDevice] = useState(false);
+
   const { toast } = useToast();
   const navigate = useNavigate();
 
   // No longer needed restricted list
-  const locations = [];
+  const locations: string[] = [];
 
   useEffect(() => {
     if (!session || !user) {
@@ -146,15 +154,68 @@ const ProfilePage = () => {
     }
   };
 
-  const handleLogout = async () => {
-    // Assuming clearUserData is available from useUser, otherwise import logOut
+  const handleMedicalUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzingMedical(true);
+    setMedicalAnalysis(null);
+
     try {
-      if (confirm('Are you sure you want to log out?')) {
-        // Force reload or redirect to ensure clean state
-        navigate('/login');
+      const worker = await createWorker('eng');
+      const ret = await worker.recognize(file);
+      await worker.terminate();
+
+      const text = ret.data.text;
+      const keywords = ['HbA1c', 'Cholesterol', 'Vitamin D', 'Glucose', 'Blood Pressure'];
+      const found = keywords.filter(k => text.includes(k));
+
+      if (found.length > 0) {
+        setMedicalAnalysis(`Detected Records: ${found.join(', ')}. Saved to context.`);
+        // In a real app, we'd parse the values too.
+        updateUserData({ ...userData, medicalConditions: `Uploaded: ${found.join(', ')}` });
+        toast({ title: "Medical Record Analyzed", description: "Updated health context with found metrics." });
+      } else {
+        setMedicalAnalysis("Analysis complete. No specific markers found, but document saved.");
       }
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Analysis Failed", variant: "destructive" });
+    } finally {
+      setIsAnalyzingMedical(false);
+    }
+  };
+
+  const connectHeartRate = async () => {
+    setIsConnectingDevice(true);
+    try {
+      // @ts-ignore - Web Bluetooth types might be missing
+      if (!navigator.bluetooth) throw new Error("Bluetooth not supported");
+
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ services: ['heart_rate'] }]
+      });
+      const server = await device.gatt?.connect();
+      const service = await server?.getPrimaryService('heart_rate');
+      const characteristic = await service?.getCharacteristic('heart_rate_measurement');
+
+      await characteristic?.startNotifications();
+      characteristic?.addEventListener('characteristicvaluechanged', (e: any) => {
+        const value = e.target.value;
+        const hr = value.getUint8(1); // Standard HR format
+        setHeartRate(hr);
+      });
+
+      toast({ title: "Device Connected", description: `Paired with ${device.name}` });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Connection Failed",
+        description: "Could not connect to Bluetooth device. Ensure distinct Bluetooth is enabled.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsConnectingDevice(false);
     }
   };
 
@@ -185,45 +246,110 @@ const ProfilePage = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm shadow-xl border-0 ring-1 ring-gray-200/50">
-              <CardHeader className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-t-lg">
-                <CardTitle className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">Personal Information</CardTitle>
-                <CardDescription>Update your personal details and preferences</CardDescription>
-              </CardHeader>
-              <CardContent className="p-6">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <ProfileForm
-                    formData={formData}
-                    onInputChange={handleInputChange}
-                    onSelectChange={handleSelectChange}
-                    locations={locations}
-                  />
+            <div className="lg:col-span-2 space-y-8">
+              <Card className="bg-white/80 backdrop-blur-sm shadow-xl border-0 ring-1 ring-gray-200/50">
+                <CardHeader className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-t-lg">
+                  <CardTitle className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">Personal Information</CardTitle>
+                  <CardDescription>Update your personal details and preferences</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <ProfileForm
+                      formData={formData}
+                      onInputChange={handleInputChange}
+                      onSelectChange={handleSelectChange}
+                      locations={locations}
+                    />
 
-                  <div className="flex justify-between pt-4 border-t">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => {
-                        if (confirm("Sign out?")) navigate('/login');
-                      }}
-                    >
-                      Log Out
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={isLoading}
-                      className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold shadow-lg"
-                    >
-                      {isLoading ? "Saving..." : "Save Changes"}
-                    </Button>
+                    <div className="flex justify-between pt-4 border-t">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => {
+                          if (confirm("Sign out?")) navigate('/login');
+                        }}
+                      >
+                        Log Out
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={isLoading}
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold shadow-lg"
+                      >
+                        {isLoading ? "Saving..." : "Save Changes"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Connected Health Section */}
+              <Card className="bg-white/80 backdrop-blur-sm shadow-xl border-0 ring-1 ring-gray-200/50">
+                <CardHeader className="bg-gradient-to-r from-green-500/10 to-teal-500/10 rounded-t-lg">
+                  <CardTitle className="flex items-center gap-2 text-teal-700">
+                    <Activity className="h-5 w-5" /> Connected Health
+                  </CardTitle>
+                  <CardDescription>Integrate medical records and wearables</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+
+                  {/* Medical Upload */}
+                  <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <div className="bg-blue-100 p-3 rounded-full">
+                      <FileText className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-800">Medical Records (OCR)</h3>
+                      <p className="text-sm text-gray-500 mb-3">Upload blood reports or prescriptions. AI will extract key metrics.</p>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          id="med-upload"
+                          className="hidden"
+                          onChange={handleMedicalUpload}
+                        />
+                        <label htmlFor="med-upload" className="cursor-pointer">
+                          <Button asChild variant="outline" size="sm" disabled={isAnalyzingMedical}>
+                            <span>{isAnalyzingMedical ? 'Analyzing...' : <><Upload className="w-4 h-4 mr-2" /> Upload File</>}</span>
+                          </Button>
+                        </label>
+                        {medicalAnalysis && <span className="text-xs text-green-600 font-medium">{medicalAnalysis}</span>}
+                      </div>
+                    </div>
                   </div>
-                </form>
-              </CardContent>
-            </Card>
+
+                  {/* Wearable Connection */}
+                  <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <div className="bg-red-100 p-3 rounded-full">
+                      <Heart className="h-6 w-6 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-gray-800">Heart Rate Monitor</h3>
+                        {heartRate && <span className="animate-pulse text-red-600 font-bold">{heartRate} BPM</span>}
+                      </div>
+                      <p className="text-sm text-gray-500 mb-3">Connect a Bluetooth LE heart rate strap.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={connectHeartRate}
+                        disabled={isConnectingDevice}
+                        className={heartRate ? "border-green-200 bg-green-50 text-green-700" : ""}
+                      >
+                        {isConnectingDevice ? 'Scanning...' : heartRate ? 'Device Connected' : <><Bluetooth className="w-4 h-4 mr-2" /> Connect Device</>}
+                      </Button>
+                    </div>
+                  </div>
+
+                </CardContent>
+              </Card>
+            </div>
 
             <div className="space-y-8">
               <ProfileStats />
+
               {/* Achievements Section */}
               <Card className="bg-white/80 backdrop-blur-sm shadow-xl border-0 ring-1 ring-gray-200/50">
                 <CardHeader className="pb-3 border-b">

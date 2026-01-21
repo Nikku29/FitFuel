@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { aiService, DashboardInsights } from '@/services/aiService';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getUserWorkoutLogs, WorkoutLog } from '@/integrations/firebase/firestore';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { startOfWeek, endOfWeek, isWithinInterval, subDays, isSameDay, format, parseISO } from 'date-fns';
 import {
   Activity,
   Calendar,
@@ -30,10 +31,20 @@ import CalorieAnalysisResult from '@/components/calories/CalorieAnalysisResult';
 import { useToast } from '@/hooks/use-toast';
 
 const Dashboard = () => {
-  const { userData } = useUser();
+  const { userData, user } = useUser(); // Get auth user for ID
   const [aiInsights, setAiInsights] = useState<DashboardInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
+
+  // Real Data State
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(true);
+  const [stats, setStats] = useState({
+    workoutsThisWeek: 0,
+    caloriesBurned: 0,
+    activeMinutes: 0,
+    streak: 0
+  });
 
   // AI Scanner State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -42,40 +53,89 @@ const Dashboard = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
-  // Sample data for display
-  const weeklyProgress = [
-    { day: 'Mon', completed: true, workoutTime: 45 },
-    { day: 'Tue', completed: true, workoutTime: 30 },
-    { day: 'Wed', completed: false, workoutTime: 0 },
-    { day: 'Thu', completed: true, workoutTime: 60 },
-    { day: 'Fri', completed: false, workoutTime: 0 },
-    { day: 'Sat', completed: true, workoutTime: 75 },
-    { day: 'Sun', completed: false, workoutTime: 0 },
-  ];
+  // Load Real Data
+  useEffect(() => {
+    const fetchRealData = async () => {
+      if (!user) return;
+      setLoadingLogs(true);
 
-  const achievements = [
-    { icon: Trophy, title: "7-Day Streak", description: "Completed workouts for 7 consecutive days", earned: true },
-    { icon: Flame, title: "Calorie Burner", description: "Burned 1000+ calories in a week", earned: true },
-    { icon: Timer, title: "Early Bird", description: "Completed 5 morning workouts", earned: false },
-    { icon: Heart, title: "Cardio Champion", description: "Completed 10 cardio sessions", earned: false },
-  ];
+      const { logs } = await getUserWorkoutLogs(user.uid);
+      setWorkoutLogs(logs);
 
-  const stats = [
-    { label: "Workouts This Week", value: "4", icon: Dumbbell, color: "bg-fitfusion-purple" },
-    { label: "Calories Burned", value: "1,247", icon: Flame, color: "bg-fitfusion-orange" },
-    { label: "Active Minutes", value: "210", icon: Timer, color: "bg-fitfusion-green" },
-    { label: "Streak Days", value: "12", icon: Trophy, color: "bg-fitfusion-blue" },
-  ];
+      // Calculate Stats
+      const now = new Date();
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+
+      const thisWeekLogs = logs.filter(log => isWithinInterval(log.date, { start: weekStart, end: weekEnd }));
+
+      const calories = logs.reduce((acc, log) => acc + (log.caloriesBurned || 0), 0);
+      const minutes = logs.reduce((acc, log) => acc + (log.duration || 0), 0);
+
+      // Calculate Streak
+      let currentStreak = 0;
+      const sortedLogs = [...logs].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      if (sortedLogs.length > 0) {
+        let checkDate = now;
+        // Check if did workout today
+        if (isSameDay(sortedLogs[0].date, checkDate)) {
+          currentStreak++;
+          checkDate = subDays(checkDate, 1);
+        } else if (isSameDay(sortedLogs[0].date, subDays(checkDate, 1))) {
+          // Or yesterday (streak valid if missed today but did yesterday? standard logic usually requires today or yesterday to keep alive)
+          checkDate = subDays(checkDate, 1);
+        }
+
+        // Simple iteration for previous days
+        // Note: exact consecutive day logic can be complex with multiple logs per day.
+        // Simplified: Unique days with workouts.
+        const uniqueDays = Array.from(new Set(logs.map(l => format(l.date, 'yyyy-MM-dd')))).sort().reverse();
+        if (uniqueDays.length > 0) {
+          const todayStr = format(now, 'yyyy-MM-dd');
+          const yesterdayStr = format(subDays(now, 1), 'yyyy-MM-dd');
+
+          // If most recent is today or yesterday, streak is alive
+          if (uniqueDays[0] === todayStr || uniqueDays[0] === yesterdayStr) {
+            currentStreak = 1;
+            let prevDate = parseISO(uniqueDays[0]);
+
+            for (let i = 1; i < uniqueDays.length; i++) {
+              const currDate = parseISO(uniqueDays[i]);
+              if (isSameDay(currDate, subDays(prevDate, 1))) {
+                currentStreak++;
+                prevDate = currDate;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      setStats({
+        workoutsThisWeek: thisWeekLogs.length,
+        caloriesBurned: calories,
+        activeMinutes: minutes,
+        streak: currentStreak
+      });
+
+      setLoadingLogs(false);
+    };
+
+    fetchRealData();
+  }, [user]);
+
 
   // Check AI configuration and generate insights
   useEffect(() => {
     const config = aiService.getConfigurationStatus();
     setAiConfigured(config.configured);
 
-    if (config.configured && userData) {
+    if (config.configured && userData && !loadingLogs) {
       generateInsights();
     }
-  }, [userData]);
+  }, [userData, loadingLogs]);
 
   const generateInsights = async () => {
     if (!aiConfigured || !userData || loadingInsights) return;
@@ -83,12 +143,8 @@ const Dashboard = () => {
     setLoadingInsights(true);
     try {
       const progressData = {
-        weeklyProgress,
-        completedWorkouts,
-        totalWorkoutTime,
-        weeklyGoal,
-        achievements: achievements.filter(a => a.earned),
-        stats
+        stats,
+        recentLogs: workoutLogs.slice(0, 5)
       };
 
       const insights = await aiService.generateDashboardInsights(userData, progressData);
@@ -99,6 +155,28 @@ const Dashboard = () => {
       setLoadingInsights(false);
     }
   };
+
+  // Prepare Chart Data
+  const chartData = [
+    { name: 'Mon', minutes: 0 },
+    { name: 'Tue', minutes: 0 },
+    { name: 'Wed', minutes: 0 },
+    { name: 'Thu', minutes: 0 },
+    { name: 'Fri', minutes: 0 },
+    { name: 'Sat', minutes: 0 },
+    { name: 'Sun', minutes: 0 },
+  ];
+
+  if (!loadingLogs) {
+    const now = new Date();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    workoutLogs.forEach(log => {
+      if (isWithinInterval(log.date, { start: weekStart, end: endOfWeek(now, { weekStartsOn: 1 }) })) {
+        const dayIndex = (log.date.getDay() + 6) % 7; // Shift Sun(0) to 6, Mon(1) to 0
+        chartData[dayIndex].minutes += log.duration;
+      }
+    });
+  }
 
   const handleCapture = async (imageSrc: string) => {
     setScannedImage(imageSrc);
@@ -124,91 +202,71 @@ const Dashboard = () => {
     setAnalysisResult(null);
   };
 
-  const handleLogMeal = () => {
-    toast({
-      title: "Meal Logged!",
-      description: `Logged ${analysisResult.calories} kcal for ${analysisResult.foodName}.`,
-    });
+  const handleLogMeal = async () => {
+    if (!user || !analysisResult) return;
+
+    try {
+      await import('@/integrations/firebase/firestore').then(({ logNutrition }) =>
+        logNutrition({
+          userId: user.uid,
+          foodName: analysisResult.foodName,
+          calories: analysisResult.calories,
+          macros: {
+            protein: analysisResult.protein,
+            carbs: analysisResult.carbs,
+            fat: analysisResult.fat
+          },
+          date: new Date(),
+          mealType: 'snack' // Defaulting to snack for quick scan
+        })
+      );
+
+      toast({
+        title: "Meal Logged",
+        description: `added ${analysisResult.calories} kcal to your daily total.`,
+      });
+
+      // Update local stats visually (optional, real update happens on refresh/listener)
+      setStats(prev => ({
+        ...prev,
+        caloriesBurned: prev.caloriesBurned // This is burned, not consumed. In full app we'd track consumed separately.
+        // For now just logging it to DB is the goal.
+      }));
+
+    } catch (e) {
+      console.error("Failed to log meal", e);
+      toast({ title: "Error", description: "Could not save meal.", variant: "destructive" });
+    }
+
     setIsScannerOpen(false);
     handleResetScan();
   };
 
-  const getGoalColor = (goal: string) => {
-    switch (goal) {
-      case 'Weight Loss': return 'bg-fitfusion-red';
-      case 'Muscle Gain': return 'bg-fitfusion-purple';
-      case 'General Fitness': return 'bg-fitfusion-green';
-      case 'Endurance': return 'bg-fitfusion-blue';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  const getGoalIcon = (goal: string) => {
-    switch (goal) {
-      case 'Weight Loss': return TrendingUp;
-      case 'Muscle Gain': return Dumbbell;
-      case 'General Fitness': return Heart;
-      case 'Endurance': return Timer;
-      default: return Target;
-    }
-  };
-
-  const completedWorkouts = weeklyProgress.filter(day => day.completed).length;
-  const weeklyGoal = 5;
-  const progressPercentage = (completedWorkouts / weeklyGoal) * 100;
-
-  const totalWorkoutTime = weeklyProgress.reduce((total, day) => total + day.workoutTime, 0);
-
-  // Calculate BMI if height and weight are available
-  const calculateBMI = () => {
-    if (userData.height && userData.weight) {
-      const heightInMeters = userData.height / 100;
-      return (userData.weight / (heightInMeters * heightInMeters)).toFixed(1);
-    }
-    return null;
-  };
-
-  const getBMICategory = (bmi: number) => {
-    if (bmi < 18.5) return { category: "Underweight", color: "text-fitfusion-blue" };
-    if (bmi < 25) return { category: "Normal", color: "text-fitfusion-green" };
-    if (bmi < 30) return { category: "Overweight", color: "text-fitfusion-orange" };
-    return { category: "Obese", color: "text-fitfusion-red" };
-  };
-
   const getPersonalizedRecommendation = () => {
-    const isVegetarian = userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Vegan';
-    const isVegan = userData.dietaryPreference === 'Vegan';
-
     if (userData.fitnessGoal === 'Weight Loss') {
       return {
         title: "Weight Loss Focus",
-        description: isVegan ? "Try our plant-based HIIT workouts with quinoa protein bowls" : "High-intensity cardio with lean protein meals recommended",
+        description: "High-intensity cardio with lean protein meals recommended",
         action: "Start HIIT Workout",
         color: "border-fitfusion-red"
       };
     }
-
-    if (userData.fitnessGoal === 'Muscle Gain') {
-      return {
-        title: "Muscle Building",
-        description: "Strength training with progressive overload and high-protein nutrition",
-        action: "View Strength Programs",
-        color: "border-fitfusion-purple"
-      };
-    }
-
     return {
       title: "General Fitness",
-      description: "Balanced workout routine with varied exercises and nutritious meals",
+      description: "Balanced workout routine with varied exercises",
       action: "Explore Workouts",
       color: "border-fitfusion-green"
     };
   };
 
   const recommendation = getPersonalizedRecommendation();
-  const bmi = calculateBMI();
-  const bmiData = bmi ? getBMICategory(parseFloat(bmi)) : null;
-  const GoalIcon = getGoalIcon(userData.fitnessGoal);
+
+  const displayStats = [
+    { label: "Workouts This Week", value: stats.workoutsThisWeek, icon: Dumbbell, color: "bg-fitfusion-purple" },
+    { label: "Calories Burned", value: stats.caloriesBurned, icon: Flame, color: "bg-fitfusion-orange" },
+    { label: "Active Minutes", value: stats.activeMinutes, icon: Timer, color: "bg-fitfusion-green" },
+    { label: "Streak Days", value: stats.streak, icon: Trophy, color: "bg-fitfusion-blue" },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-fitfusion-purple/5 via-white to-fitfusion-blue/5 p-4 sm:p-6">
@@ -216,14 +274,14 @@ const Dashboard = () => {
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-fitfusion-purple to-fitfusion-blue bg-clip-text text-transparent">
-            Welcome back, {userData.name || 'Fitness Enthusiast'}!
+            Welcome back, {userData.name || 'Athlete'}!
           </h1>
-          <p className="text-gray-600">Ready to crush your fitness goals today?</p>
+          <p className="text-gray-600">Dynamic Dashboard • Live Data</p>
         </div>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
+          {displayStats.map((stat, index) => {
             const Icon = stat.icon;
             return (
               <Card key={index} className="text-center hover:shadow-lg transition-all duration-300">
@@ -231,7 +289,9 @@ const Dashboard = () => {
                   <div className={`${stat.color} w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-2`}>
                     <Icon className="h-6 w-6 text-white" />
                   </div>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {loadingLogs ? <Skeleton className="h-8 w-12 mx-auto" /> : stat.value}
+                  </p>
                   <p className="text-sm text-gray-600">{stat.label}</p>
                 </CardContent>
               </Card>
@@ -240,248 +300,108 @@ const Dashboard = () => {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* Weekly Progress */}
+          {/* Weekly Progress Chart */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-fitfusion-purple" />
-                Weekly Progress
+                Weekly Activity
               </CardTitle>
               <CardDescription>
-                {completedWorkouts} of {weeklyGoal} workouts completed
+                Minutes of activity per day (Current Week)
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Progress value={progressPercentage} className="h-3" />
-              <div className="grid grid-cols-7 gap-2">
-                {weeklyProgress.map((day, index) => (
-                  <div key={index} className="text-center">
-                    <div className={`w-8 h-8 rounded-full mx-auto mb-1 flex items-center justify-center text-xs font-medium ${day.completed
-                        ? 'bg-fitfusion-green text-white'
-                        : 'bg-gray-200 text-gray-600'
-                      }`}>
-                      {day.completed ? '✓' : day.day[0]}
-                    </div>
-                    <p className="text-xs text-gray-500">{day.day}</p>
-                    {day.workoutTime > 0 && (
-                      <p className="text-xs text-fitfusion-green font-medium">{day.workoutTime}m</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600">
-                  Total workout time this week: <span className="font-semibold text-fitfusion-purple">{totalWorkoutTime} minutes</span>
-                </p>
-              </div>
+            <CardContent className="h-[200px] w-full">
+              {loadingLogs ? (
+                <Skeleton className="h-full w-full" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis hide />
+                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                    <Bar dataKey="minutes" radius={[4, 4, 0, 0]}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.minutes > 0 ? '#9333ea' : '#e5e7eb'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
-          {/* User Profile Summary */}
+          {/* User Profile Summary / Goal */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-fitfusion-blue" />
-                Your Profile
+                <Target className="h-5 w-5 text-fitfusion-blue" />
+                Current Focus
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {userData.fitnessGoal && (
-                <div className="flex items-center gap-3">
-                  <div className={`${getGoalColor(userData.fitnessGoal)} w-10 h-10 rounded-full flex items-center justify-center`}>
-                    <GoalIcon className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{userData.fitnessGoal}</p>
-                    <p className="text-sm text-gray-600">Current Goal</p>
-                  </div>
-                </div>
-              )}
-
-              {userData.activityLevel && (
-                <div className="flex items-center gap-3">
-                  <div className="bg-fitfusion-orange w-10 h-10 rounded-full flex items-center justify-center">
-                    <Activity className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{userData.activityLevel}</p>
-                    <p className="text-sm text-gray-600">Fitness Level</p>
-                  </div>
-                </div>
-              )}
-
-              {userData.dietaryPreference && (
-                <div className="flex items-center gap-3">
-                  <div className="bg-fitfusion-green w-10 h-10 rounded-full flex items-center justify-center">
-                    <Apple className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{userData.dietaryPreference}</p>
-                    <p className="text-sm text-gray-600">Diet Preference</p>
-                  </div>
-                </div>
-              )}
-
-              {bmi && bmiData && (
-                <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">BMI</p>
-                  <p className="text-xl font-bold">{bmi}</p>
-                  <p className={`text-sm font-medium ${bmiData.color}`}>{bmiData.category}</p>
-                </div>
-              )}
+              <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                <h3 className="font-semibold text-purple-900">{recommendation.title}</h3>
+                <p className="text-sm text-purple-700 mt-1">{recommendation.description}</p>
+              </div>
 
               <Link to="/profile">
-                <Button variant="outline" className="w-full">
-                  Update Profile
+                <Button variant="outline" className="w-full mt-2">
+                  View Health Stats
                 </Button>
               </Link>
             </CardContent>
           </Card>
         </div>
 
-        {/* Personalized Recommendation */}
-        <Card className={`border-2 ${recommendation.color}`}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-fitfusion-purple" />
-              Personalized Recommendation
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="font-semibold text-lg">{recommendation.title}</h3>
-                <p className="text-gray-600">{recommendation.description}</p>
-              </div>
-              <Link to="/workouts">
-                <Button className="bg-gradient-to-r from-fitfusion-purple to-fitfusion-blue text-white">
-                  {recommendation.action}
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* AI Insights */}
+        {/* AI Insights & Actions */}
         {aiConfigured && (
           <Card className="border-2 border-fitfusion-blue/20 bg-gradient-to-r from-blue-50 to-purple-50">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-fitfusion-blue" />
-                  AI Insights
+                  AI Coach Insights
                 </div>
-                {userData && !loadingInsights && (
-                  <Button
-                    onClick={generateInsights}
-                    variant="outline"
-                    size="sm"
-                    className="text-fitfusion-blue border-fitfusion-blue hover:bg-fitfusion-blue/10"
-                  >
-                    <Sparkles className="h-4 w-4 mr-1" />
-                    Refresh
-                  </Button>
+                {!loadingInsights && (
+                  <Button onClick={generateInsights} variant="ghost" size="sm" className="h-8">Refresh</Button>
                 )}
               </CardTitle>
-              <CardDescription>Personalized insights based on your progress</CardDescription>
             </CardHeader>
             <CardContent>
               {loadingInsights ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
                 </div>
               ) : aiInsights ? (
-                <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    <div className="p-4 bg-white rounded-lg border border-fitfusion-blue/20">
-                      <h4 className="font-semibold text-fitfusion-blue mb-2">💡 Personalized Tip</h4>
-                      <p className="text-gray-700 text-sm">{aiInsights.personalizedTip}</p>
-                    </div>
-                    <div className="p-4 bg-white rounded-lg border border-fitfusion-green/20">
-                      <h4 className="font-semibold text-fitfusion-green mb-2">🎯 Recommended Action</h4>
-                      <p className="text-gray-700 text-sm">{aiInsights.recommendedAction}</p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="flex gap-3">
+                    <div className="min-w-[4px] bg-green-500 rounded-full" />
+                    <div>
+                      <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Tip</p>
+                      <p className="text-sm text-gray-800">{aiInsights.personalizedTip}</p>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <div className="p-4 bg-white rounded-lg border border-fitfusion-purple/20">
-                      <h4 className="font-semibold text-fitfusion-purple mb-2">📊 Progress Analysis</h4>
-                      <p className="text-gray-700 text-sm">{aiInsights.progressAnalysis}</p>
-                    </div>
-                    <div className="p-4 bg-white rounded-lg border border-fitfusion-orange/20">
-                      <h4 className="font-semibold text-fitfusion-orange mb-2">🚀 Motivation</h4>
-                      <p className="text-gray-700 text-sm">{aiInsights.motivationalMessage}</p>
+                  <div className="flex gap-3">
+                    <div className="min-w-[4px] bg-purple-500 rounded-full" />
+                    <div>
+                      <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">Analysis</p>
+                      <p className="text-sm text-gray-800">{aiInsights.progressAnalysis}</p>
                     </div>
                   </div>
-                </div>
-              ) : userData ? (
-                <div className="text-center py-8">
-                  <Button
-                    onClick={generateInsights}
-                    className="bg-fitfusion-blue hover:bg-fitfusion-blue/90"
-                  >
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Generate AI Insights
-                  </Button>
-                  <p className="text-gray-600 text-sm mt-2">Get personalized insights about your fitness journey</p>
                 </div>
               ) : (
-                <Alert>
-                  <AlertDescription>
-                    Complete your profile to get personalized AI insights. <Link to="/profile" className="text-fitfusion-blue underline">Update Profile</Link>
-                  </AlertDescription>
-                </Alert>
+                <div className="flex justify-center p-4">
+                  <Button onClick={generateInsights}>Activate AI Coach</Button>
+                </div>
               )}
             </CardContent>
           </Card>
         )}
 
-        {/* Achievements */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-fitfusion-yellow" />
-              Achievements
-            </CardTitle>
-            <CardDescription>Your fitness milestones</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {achievements.map((achievement, index) => {
-                const Icon = achievement.icon;
-                return (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg border-2 text-center transition-all duration-300 ${achievement.earned
-                        ? 'border-fitfusion-yellow bg-fitfusion-yellow/10'
-                        : 'border-gray-200 bg-gray-50 opacity-60'
-                      }`}
-                  >
-                    <div className={`w-12 h-12 rounded-full mx-auto mb-2 flex items-center justify-center ${achievement.earned ? 'bg-fitfusion-yellow' : 'bg-gray-300'
-                      }`}>
-                      <Icon className={`h-6 w-6 ${achievement.earned ? 'text-white' : 'text-gray-600'}`} />
-                    </div>
-                    <h3 className="font-semibold text-sm">{achievement.title}</h3>
-                    <p className="text-xs text-gray-600 mt-1">{achievement.description}</p>
-                    {achievement.earned && (
-                      <Badge variant="secondary" className="mt-2 bg-fitfusion-yellow text-white">
-                        Earned!
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Quick Actions */}
+        {/* Quick Actions (Updated) */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link to="/workouts">
             <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">
@@ -490,7 +410,7 @@ const Dashboard = () => {
                   <Dumbbell className="h-6 w-6 text-white" />
                 </div>
                 <h3 className="font-semibold">Start Workout</h3>
-                <p className="text-sm text-gray-600">Begin your fitness session</p>
+                <p className="text-sm text-gray-600">Log activity</p>
               </CardContent>
             </Card>
           </Link>
@@ -502,20 +422,20 @@ const Dashboard = () => {
                   <Apple className="h-6 w-6 text-white" />
                 </div>
                 <h3 className="font-semibold">Nutrition</h3>
-                <p className="text-sm text-gray-600">Explore healthy recipes</p>
+                <p className="text-sm text-gray-600">Find recipes</p>
               </CardContent>
             </Card>
           </Link>
 
           <Dialog open={isScannerOpen} onOpenChange={setIsScannerOpen}>
             <DialogTrigger asChild>
-              <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group border-2 hover:border-fitfusion-purple/50">
+              <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group border-2 border-purple-200 hover:border-fitfusion-purple">
                 <CardContent className="p-6 text-center">
                   <div className="bg-gradient-to-br from-purple-500 to-indigo-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform shadow-lg">
                     <Sparkles className="h-6 w-6 text-white" />
                   </div>
-                  <h3 className="font-semibold text-purple-700">Scan Meal (AI)</h3>
-                  <p className="text-sm text-gray-600">Instant calorie analysis</p>
+                  <h3 className="font-semibold text-purple-900">Scan Meal</h3>
+                  <p className="text-sm text-gray-600">AI Calorie Tracker</p>
                 </CardContent>
               </Card>
             </DialogTrigger>
@@ -529,22 +449,10 @@ const Dashboard = () => {
                   />
                 </div>
               ) : (
-                <FoodCamera onCapture={handleCapture} onCancel={() => setIsScannerOpen(false)} />
+                <FoodCamera onCapture={handleCapture} onClose={() => setIsScannerOpen(false)} />
               )}
             </DialogContent>
           </Dialog>
-
-          <Link to="/assistant">
-            <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">
-              <CardContent className="p-6 text-center">
-                <div className="bg-fitfusion-blue w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                  <Heart className="h-6 w-6 text-white" />
-                </div>
-                <h3 className="font-semibold">AI Assistant</h3>
-                <p className="text-sm text-gray-600">Get personalized advice</p>
-              </CardContent>
-            </Card>
-          </Link>
 
           <Link to="/community">
             <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group">
@@ -553,7 +461,7 @@ const Dashboard = () => {
                   <Users className="h-6 w-6 text-white" />
                 </div>
                 <h3 className="font-semibold">Community</h3>
-                <p className="text-sm text-gray-600">Connect with others</p>
+                <p className="text-sm text-gray-600">Connect & Share</p>
               </CardContent>
             </Card>
           </Link>

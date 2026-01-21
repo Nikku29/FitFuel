@@ -12,6 +12,10 @@ import { aiService, PersonalizedRecipe } from '@/services/aiService';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import FoodCamera from '@/components/calories/FoodCamera';
+import { Camera } from 'lucide-react';
+import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
+import { FoodPrediction } from '@/services/vision/nutritionScanner';
 
 // Updated recipe data with new vegetarian and non-vegetarian recipes
 const recipeData = [
@@ -508,6 +512,7 @@ const RecipePage = () => {
   const [showAiRecipes, setShowAiRecipes] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [ingredientsInput, setIngredientsInput] = useState('');
+  const [showCamera, setShowCamera] = useState(false);
 
   // Check AI configuration on component mount
   useEffect(() => {
@@ -578,74 +583,49 @@ const RecipePage = () => {
             </p>
           </div>
 
-          {/* AI Recipe Generation */}
+          {/* Natural Language Search - Always Visible */}
           {aiConfigured ? (
-            <Card className="border-2 border-fitfuel-purple/20 bg-gradient-to-r from-purple-50 to-blue-50">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                  <div className="flex items-start space-x-3 max-w-xl">
-                    <div className="bg-fitfuel-purple p-2 rounded-lg mt-1">
-                      <Sparkles className="h-6 w-6 text-white" />
-                    </div>
-                    <div className="space-y-3 w-full">
-                      <div>
-                        <h3 className="font-semibold text-lg">AI-Personalized Chef</h3>
-                        <p className="text-gray-600 text-sm">
-                          Tell us what ingredients you have, or let us surprise you based on your {userData?.fitnessGoal?.toLowerCase() || 'fitness'} goals.
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="e.g., chicken, spinach, rice (optional)"
-                          className="bg-white border-purple-200"
-                          value={ingredientsInput}
-                          onChange={(e) => setIngredientsInput(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-                    {!showAiRecipes && (
-                      <Button
-                        onClick={generateAiRecipes}
-                        disabled={loadingAi || !userData}
-                        className="bg-fitfuel-purple hover:bg-fitfuel-purple/90 w-full sm:w-auto"
-                      >
-                        {loadingAi ? (
-                          <>
-                            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                            Cheffing it up...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate Recipes
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    {showAiRecipes && (
-                      <Button
-                        onClick={generateAiRecipes}
-                        disabled={loadingAi}
-                        variant="outline"
-                        className="border-fitfuel-purple text-fitfuel-purple hover:bg-fitfuel-purple/10 w-full sm:w-auto"
-                      >
-                        {loadingAi ? 'Regenerating...' : 'Regenerate'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                {!userData && (
-                  <Alert className="mt-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Please complete your profile to generate personalized recipes. <Link to="/profile" className="text-fitfuel-purple underline">Update Profile</Link>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
+            <div className="mb-6">
+              <NaturalLanguageInput
+                type="recipe"
+                placeholder="✨ Describe your ideal meal (e.g., 'High protein breakfast under 400 calories')"
+                isLoading={loadingAi}
+                onSearch={async (query) => {
+                  setLoadingAi(true);
+                  try {
+                    const mode = userData?.dietaryPreference ? 'strict_profile' : 'guest';
+                    const results = await aiService.generateFromNaturalLanguage(
+                      userData,
+                      query,
+                      'recipe',
+                      mode
+                    ) as PersonalizedRecipe[];
+                    setAiRecipes(results);
+                    setShowAiRecipes(true);
+                    toast({
+                      title: 'Recipe Generated!',
+                      description: `Created ${results.length} personalized recipe(s) for you.`,
+                    });
+                  } catch (error) {
+                    console.error('Recipe generation failed:', error);
+                    toast({
+                      title: 'Generation Failed',
+                      description: 'Could not generate recipe. Try again.',
+                      variant: 'destructive'
+                    });
+                  } finally {
+                    setLoadingAi(false);
+                  }
+                }}
+                onFoodScan={(prediction: FoodPrediction) => {
+                  console.log('Food scanned:', prediction);
+                  toast({
+                    title: 'Food Detected!',
+                    description: `${prediction.className} - Est. ${prediction.estimatedCalories} kcal`,
+                  });
+                }}
+              />
+            </div>
           ) : (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -653,6 +633,43 @@ const RecipePage = () => {
                 AI recipe generation is not configured. Add your API key to enable personalized recommendations.
               </AlertDescription>
             </Alert>
+          )}
+
+          {/* Profile Banner - Only for authenticated users */}
+          {userData?.dietaryPreference && (
+            <Alert className="mb-6 bg-purple-50 border-purple-200">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <AlertDescription className="text-purple-800">
+                Showing recipes personalized for your <strong>{userData.dietaryPreference}</strong> diet and <strong>{userData.fitnessGoal || 'fitness'}</strong> goal.
+                <Link to="/profile" className="ml-2 underline">Update Profile</Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Floating Action Button (FAB) for Camera */}
+          <div className="fixed bottom-6 right-6 z-40">
+            <Button
+              onClick={() => setShowCamera(true)}
+              className="h-16 w-16 rounded-full shadow-2xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white flex items-center justify-center animate-bounce-slow"
+            >
+              <Camera size={32} />
+            </Button>
+          </div>
+
+          {/* Camera Modal */}
+          {showCamera && (
+            <FoodCamera
+              onClose={() => setShowCamera(false)}
+              onCapture={(data) => {
+                console.log("Captured:", data);
+                setShowCamera(false);
+                toast({
+                  title: data.type === 'vision' ? `Identified: ${data.value}` : `Scanned Barcode: ${data.value}`,
+                  description: `Confidence: ${data.confidence ? Math.round(data.confidence * 100) : 100}% - Fetching Macros...`,
+                });
+                // TODO: Call OpenFoodFacts here
+              }}
+            />
           )}
 
           {/* AI Generated Recipes Loading */}
@@ -679,7 +696,7 @@ const RecipePage = () => {
             </div>
           )}
 
-          {/* Search and Filter */}
+          {/* Search and Filter - Guest-Aware */}
           <div className="flex flex-col md:flex-row gap-4 items-center">
             <div className="relative w-full md:w-1/3">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
@@ -690,17 +707,21 @@ const RecipePage = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Tabs defaultValue="all" className="w-full md:w-2/3" value={currentTab} onValueChange={setCurrentTab}>
-              <TabsList className="grid grid-cols-4 md:grid-cols-7 w-full">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="veg">Vegetarian</TabsTrigger>
-                <TabsTrigger value="non-veg">Non-Veg</TabsTrigger>
-                <TabsTrigger value="breakfast">Breakfast</TabsTrigger>
-                <TabsTrigger value="lunch">Lunch</TabsTrigger>
-                <TabsTrigger value="dinner">Dinner</TabsTrigger>
-                <TabsTrigger value="snack">Snacks</TabsTrigger>
-              </TabsList>
-            </Tabs>
+
+            {/* Only show manual filters for guests or users without dietary preference */}
+            {!userData?.dietaryPreference && (
+              <Tabs defaultValue="all" className="w-full md:w-2/3" value={currentTab} onValueChange={setCurrentTab}>
+                <TabsList className="grid grid-cols-4 md:grid-cols-7 w-full">
+                  <TabsTrigger value="all">All</TabsTrigger>
+                  <TabsTrigger value="veg">Vegetarian</TabsTrigger>
+                  <TabsTrigger value="non-veg">Non-Veg</TabsTrigger>
+                  <TabsTrigger value="breakfast">Breakfast</TabsTrigger>
+                  <TabsTrigger value="lunch">Lunch</TabsTrigger>
+                  <TabsTrigger value="dinner">Dinner</TabsTrigger>
+                  <TabsTrigger value="snack">Snacks</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
           </div>
 
           {/* Recipe Grid */}

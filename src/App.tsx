@@ -57,7 +57,7 @@ const AnimatedRoutes = () => {
         <Route path="/" element={<PageTransition><Home /></PageTransition>} />
         <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
         <Route path="/signup" element={<PageTransition><Signup /></PageTransition>} />
-        <Route path="/assistant" element={<PageTransition><Assistant /></PageTransition>} />
+        {/* Assistant Route Removed for Open Source UX Pivot */}
         <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
         <Route path="/recipes" element={<PageTransition><Recipes /></PageTransition>} />
         <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />

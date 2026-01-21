@@ -208,6 +208,19 @@ export interface WorkoutPlan {
   title: string;
   description?: string;
   workoutIds: string[];
+  // AI Generated Content Support
+  exercises?: {
+    name: string;
+    duration?: string;
+    reps?: string;
+    sets?: string;
+    description: string;
+    targetMuscles: string[];
+  }[];
+  difficulty?: string;
+  duration?: string;
+  benefits?: string[];
+
   schedule: {
     monday?: string[];
     tuesday?: string[];
@@ -218,6 +231,7 @@ export interface WorkoutPlan {
     sunday?: string[];
   };
   isActive: boolean;
+  isFavorite?: boolean; // Added for User Request
   created_at?: Date;
   updated_at?: Date;
 }
@@ -392,5 +406,37 @@ export const getUserProgress = async (userId: string, limit: number = 50) => {
   } catch (error) {
     console.error('Error fetching user progress:', error);
     return { progress: [], error };
+  }
+};
+
+// Nutrition Logs
+export interface NutritionLog {
+  id?: string;
+  userId: string;
+  foodName: string;
+  calories: number;
+  macros: {
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber?: number;
+  };
+  image?: string; // Optional URL or base64 placeholder
+  mealType?: string; // e.g., 'breakfast', 'lunch'
+  date: Date;
+  created_at?: Date;
+}
+
+export const logNutrition = async (log: Omit<NutritionLog, 'id' | 'created_at'>) => {
+  try {
+    const docRef = await addDoc(collection(db, 'nutrition_logs'), {
+      ...log,
+      date: Timestamp.fromDate(log.date),
+      created_at: Timestamp.now()
+    });
+    return { id: docRef.id, error: null };
+  } catch (error) {
+    console.error('Error logging nutrition:', error);
+    return { id: null, error };
   }
 };

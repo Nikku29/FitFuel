@@ -31,7 +31,6 @@ const Navbar = () => {
 
   const navLinks = [
     { name: 'Home', path: '/' },
-    { name: 'AI Assistant', path: '/assistant' },
     { name: 'Dashboard', path: '/dashboard' },
     { name: 'Recipes', path: '/recipes' },
     { name: 'Workouts', path: '/workouts' },

@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sparkles, AlertCircle, Dumbbell, Clock, Flame } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
 
 // Import workout data
 import { workoutData, exerciseInstructions } from '@/data/workoutData';
@@ -32,10 +33,11 @@ const WorkoutsPage = () => {
   const [loadingAi, setLoadingAi] = useState(false);
   const [showAiWorkouts, setShowAiWorkouts] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
-  
+  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+
   // Use the workout timer hook
   const [timerState, timerActions] = useWorkoutTimer();
-  
+
   // Check AI configuration on component mount
   useEffect(() => {
     const config = aiService.getConfigurationStatus();
@@ -45,7 +47,7 @@ const WorkoutsPage = () => {
   // Generate AI workouts when user data is available
   const generateAiWorkouts = async () => {
     if (!aiConfigured || !userData || loadingAi) return;
-    
+
     setLoadingAi(true);
     try {
       const personalizedWorkouts = await aiService.generatePersonalizedWorkouts(userData, 4);
@@ -70,7 +72,7 @@ const WorkoutsPage = () => {
 
   // Combine AI workouts with static workouts
   const allWorkouts = showAiWorkouts ? [...aiWorkouts, ...workoutData] : workoutData;
-  
+
   // Filter workouts based on search term and active tab
   const filteredWorkouts = filterWorkouts(allWorkouts, searchTerm, currentTab);
 
@@ -86,7 +88,7 @@ const WorkoutsPage = () => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="min-h-screen bg-gradient-to-b from-white to-purple-100 py-4 md:py-8"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -97,69 +99,121 @@ const WorkoutsPage = () => {
           {/* Header */}
           <WorkoutHeader userData={userData} />
 
-          {/* AI Workout Generation */}
-          {aiConfigured ? (
-            <Card className="border-2 border-fitfuel-purple/20 bg-gradient-to-r from-purple-50 to-blue-50">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="bg-fitfuel-purple p-2 rounded-lg">
-                      <Sparkles className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg">AI-Personalized Workouts</h3>
-                      <p className="text-gray-600 text-sm">
-                        Get workouts tailored to your {userData?.fitnessGoal?.toLowerCase() || 'fitness'} goals and {userData?.activityLevel || 'fitness'} level
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    {!showAiWorkouts && (
-                      <Button 
-                        onClick={generateAiWorkouts}
-                        disabled={loadingAi || !userData}
-                        className="bg-fitfuel-purple hover:bg-fitfuel-purple/90"
-                      >
-                        {loadingAi ? (
-                          <>
-                            <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate AI Workouts
-                          </>
-                        )}
-                      </Button>
-                    )}
-                    {showAiWorkouts && (
-                      <Button 
-                        onClick={generateAiWorkouts}
-                        disabled={loadingAi}
-                        variant="outline"
-                        className="border-fitfuel-purple text-fitfuel-purple hover:bg-fitfuel-purple/10"
-                      >
-                        {loadingAi ? 'Regenerating...' : 'Regenerate'}
-                      </Button>
-                    )}
-                  </div>
+          {/* Natural Language Search */}
+          {aiConfigured && (
+            <div className="mb-6">
+              <NaturalLanguageInput
+                type="workout"
+                placeholder="✨ Describe your ideal workout (e.g., 'Upper body strength, no equipment')"
+                isLoading={loadingAi}
+                onSearch={async (query) => {
+                  setLoadingAi(true);
+                  try {
+                    const mode = userData?.activityLevel ? 'strict_profile' : 'guest';
+                    const results = await aiService.generateFromNaturalLanguage(
+                      userData,
+                      query,
+                      'workout',
+                      mode
+                    ) as PersonalizedWorkout[];
+                    setAiWorkouts(results);
+                    setShowAiWorkouts(true);
+                    toast({
+                      title: 'Workout Generated!',
+                      description: `Created ${results.length} personalized workout(s) for you.`,
+                    });
+                  } catch (error) {
+                    console.error('Workout generation failed:', error);
+                    toast({
+                      title: 'Generation Failed',
+                      description: 'Could not generate workout. Try again.',
+                      variant: 'destructive'
+                    });
+                  } finally {
+                    setLoadingAi(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Profile Banner - Only for authenticated users */}
+          {userData?.activityLevel && (
+            <Alert className="mb-6 bg-purple-50 border-purple-200">
+              <Sparkles className="h-4 w-4 text-purple-600" />
+              <AlertDescription className="text-purple-800">
+                Showing workouts personalized for your <strong>{userData.activityLevel}</strong> level and <strong>{userData.fitnessGoal || 'fitness'}</strong> goal.
+                {userData.medicalConditions && <span className="ml-2">Avoiding exercises unsafe for: {userData.medicalConditions}</span>}
+                <Link to="/profile" className="ml-2 underline">Update Profile</Link>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* AI Generator FAB */}
+          <div className="fixed bottom-6 right-6 z-40">
+            <Button
+              onClick={() => setIsGeneratorOpen(true)}
+              className="h-16 w-16 rounded-full shadow-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-105 transition-transform text-white flex items-center justify-center animate-bounce-slow"
+            >
+              <Dumbbell size={32} />
+            </Button>
+          </div>
+
+          {/* Generator Modal */}
+          {isGeneratorOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl"
+              >
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">Design Session</h3>
+                  <Button variant="ghost" size="sm" onClick={() => setIsGeneratorOpen(false)}>X</Button>
                 </div>
-                {!userData && (
-                  <Alert className="mt-4">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Please complete your profile to generate personalized workouts. <Link to="/profile" className="text-fitfuel-purple underline">Update Profile</Link>
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                AI workout generation is not configured. Add your API key to enable personalized recommendations.
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Time</label>
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      {['15 min', '30 min', '45+ min'].map(t => (
+                        <Button key={t} variant="outline" className="text-xs">{t}</Button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                <Button
+                  className="w-full bg-fitfuel-purple text-white py-6 text-lg mt-4"
+                  onClick={() => {
+                    setIsGeneratorOpen(false);
+                    generateAiWorkouts();
+                  }}
+                  disabled={loadingAi}
+                >
+                  {loadingAi ? 'Designing...' : 'Generate Plan'}
+                </Button>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Manual Log FAB (New) */}
+          <div className="fixed bottom-6 left-6 z-40">
+            <Button
+              className="h-14 w-14 rounded-full shadow-xl bg-white text-purple-600 hover:bg-purple-50 border border-purple-200"
+              onClick={() => toast({ title: "Manual Logging", description: "Manual workout logger coming soon!" })}
+            >
+              <span className="text-3xl font-light">+</span>
+            </Button>
+          </div>
+
+          {/* AI Config Alert or Status */}
+          {aiConfigured && !userData && (
+            <Alert className="mt-4 bg-purple-50 border-purple-200">
+              <AlertCircle className="h-4 w-4 text-purple-600" />
+              <AlertDescription className="text-purple-800">
+                Tip: Complete your profile for better AI accuracy. <Link to="/profile" className="underline">Update Profile</Link>
               </AlertDescription>
             </Alert>
           )}
@@ -195,39 +249,43 @@ const WorkoutsPage = () => {
             </div>
           )}
 
-          {/* Search and Filter */}
-          <SearchAndFilter 
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            currentTab={currentTab}
-            setCurrentTab={setCurrentTab}
-          />
+          {/* Search and Filter - Guest-Aware */}
+          {!userData?.activityLevel && (
+            <SearchAndFilter
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              currentTab={currentTab}
+              setCurrentTab={setCurrentTab}
+            />
+          )}
 
           {/* Workouts Grid */}
-          <WorkoutGrid 
+          <WorkoutGrid
             filteredWorkouts={filteredWorkouts}
             onSelectWorkout={handleSelectWorkout}
           />
         </div>
-      </div>
+      </div >
 
       {/* Workout Detail Modal */}
-      {selectedWorkout && (
-        <WorkoutDetailModal
-          selectedWorkout={selectedWorkout}
-          onClose={() => setSelectedWorkout(null)}
-          exerciseInstructions={exerciseInstructions}
-          time={timerState.time}
-          isRunning={timerState.isRunning}
-          isBreakTime={timerState.isBreakTime}
-          breakTime={timerState.breakTime}
-          startTimer={timerActions.startTimer}
-          pauseTimer={timerActions.pauseTimer}
-          stopTimer={timerActions.stopTimer}
-          startBreakTimer={timerActions.startBreakTimer}
-        />
-      )}
-    </motion.div>
+      {
+        selectedWorkout && (
+          <WorkoutDetailModal
+            selectedWorkout={selectedWorkout}
+            onClose={() => setSelectedWorkout(null)}
+            exerciseInstructions={exerciseInstructions}
+            time={timerState.time}
+            isRunning={timerState.isRunning}
+            isBreakTime={timerState.isBreakTime}
+            breakTime={timerState.breakTime}
+            startTimer={timerActions.startTimer}
+            pauseTimer={timerActions.pauseTimer}
+            stopTimer={timerActions.stopTimer}
+            startBreakTimer={timerActions.startBreakTimer}
+          />
+        )
+      }
+    </motion.div >
   );
 };
 

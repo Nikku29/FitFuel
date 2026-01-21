@@ -1,9 +1,9 @@
 
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  signInWithPopup, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  signInWithPopup,
   GoogleAuthProvider,
   updateProfile,
   sendPasswordResetEmail,
@@ -19,6 +19,11 @@ import {
 } from 'firebase/auth';
 import { auth } from './config';
 
+// STRICT: Force Local Persistence to prevent "Guest Mode" fallbacks on refresh
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.error("Auth Persistence Error:", error);
+});
+
 export const signIn = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -31,11 +36,11 @@ export const signIn = async (email: string, password: string) => {
 export const signUp = async (email: string, password: string, displayName?: string) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    
+
     if (displayName && userCredential.user) {
       await updateProfile(userCredential.user, { displayName });
     }
-    
+
     return { user: userCredential.user, error: null };
   } catch (error: any) {
     return { user: null, error };
