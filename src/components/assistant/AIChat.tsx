@@ -20,8 +20,7 @@ interface Message {
 }
 
 // AI API configuration
-const AI_API_URL = import.meta.env.VITE_DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
-const AI_API_KEY = import.meta.env.VITE_DEEPSEEK_API_KEY;
+import { aiService } from '@/services/aiService';
 
 const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
@@ -55,10 +54,10 @@ const AIChat: React.FC = () => {
   const handlePersonalizationSubmit = async (data: any) => {
     console.log('Submitting personalization data:', data);
     logEvent('personalization_form_submitted', { hasUserData: !!data });
-    
+
     const result = await createSession(data);
     console.log('Session creation result:', result);
-    
+
     if (result.success) {
       setShowPersonalizationForm(false);
       logEvent('anonymous_session_created');
@@ -91,7 +90,7 @@ const AIChat: React.FC = () => {
     if (user && userData) {
       // Authenticated user data
       let context = "You are a fitness and nutrition assistant. The user is logged in with the following profile:\n";
-      
+
       if (userData.name) context += `Name: ${userData.name}\n`;
       if (userData.age) context += `Age: ${userData.age}\n`;
       if (userData.gender) context += `Gender: ${userData.gender}\n`;
@@ -107,12 +106,12 @@ const AIChat: React.FC = () => {
       if (userData.allergies) context += `Allergies/Food Sensitivities: ${userData.allergies}\n`;
       if (userData.medicalConditions) context += `Medical Conditions: ${userData.medicalConditions}\n`;
       if (userData.activityRestrictions) context += `Activity Restrictions: ${userData.activityRestrictions}\n`;
-      
+
       return context;
     } else if (anonymousData) {
       // Anonymous user data
       let context = "You are a fitness and nutrition assistant. The user provided the following information:\n";
-      
+
       if (anonymousData.age) context += `Age: ${anonymousData.age}\n`;
       if (anonymousData.gender) context += `Gender: ${anonymousData.gender}\n`;
       if (anonymousData.height_cm && anonymousData.weight_kg) {
@@ -127,89 +126,66 @@ const AIChat: React.FC = () => {
       if (anonymousData.allergies) context += `Allergies/Food Sensitivities: ${anonymousData.allergies}\n`;
       if (anonymousData.medical_conditions) context += `Medical Conditions: ${anonymousData.medical_conditions}\n`;
       if (anonymousData.activity_restrictions) context += `Activity Restrictions: ${anonymousData.activity_restrictions}\n`;
-      
+
       return context;
     }
-    
+
     return "You are a fitness and nutrition assistant. Provide general fitness and nutrition advice.";
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!input.trim()) return;
-    
+
     const userMessage = {
       id: Date.now().toString(),
       text: input.trim(),
       sender: 'user' as const,
       timestamp: new Date()
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
     const currentInput = input.trim();
     setInput('');
     setIsLoading(true);
-    
+
     // Log user interaction
-    logEvent('ai_message_sent', { 
+    logEvent('ai_message_sent', {
       messageLength: currentInput.length,
       hasUserProfile: !!user,
       hasAnonymousData: !!anonymousData
     });
-    
+
     try {
       console.log('Sending AI request with context:', getPersonalizationContext());
-      
-      // Call AI API
-      const response = await fetch(AI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${AI_API_KEY}`,
+
+      const messages = [
+        {
+          role: 'system',
+          content: `${getPersonalizationContext()}\n\nProvide helpful, accurate, and personalized fitness and nutrition advice. Be encouraging and supportive. If asked about medical conditions, always recommend consulting with healthcare professionals.`
         },
-        body: JSON.stringify({
-          model: 'deepseek-reasoner',
-          messages: [
-            {
-              role: 'system',
-              content: `${getPersonalizationContext()}\n\nProvide helpful, accurate, and personalized fitness and nutrition advice. Be encouraging and supportive. If asked about medical conditions, always recommend consulting with healthcare professionals.`
-            },
-            {
-              role: 'user',
-              content: currentInput
-            }
-          ],
-          max_tokens: 1000,
-          temperature: 0.7
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('AI API error:', response.status, errorData);
-        logError(new Error(`AI API error: ${response.status}`), {
-          status: response.status, 
-          errorData 
-        });
-        throw new Error(`API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('AI API response:', data);
-      
-      const aiResponse = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that request. Please try again.";
-      
+        {
+          role: 'user',
+          content: currentInput
+        }
+      ];
+
+      // Call AI Service (delegates to Gemini)
+      const aiResponse = await aiService.chat(messages);
+
+      console.log('AI Response received');
+
       // Log successful AI response
-      logEvent('ai_response_received', { 
+      logEvent('ai_response_received', {
         responseLength: aiResponse.length,
         processingTime: Date.now() - parseInt(userMessage.id)
       });
-      
+
       // Add AI response to messages
       setTimeout(() => {
         setMessages(prev => [
-          ...prev, 
+          ...prev,
           {
             id: (Date.now() + 1).toString(),
             text: aiResponse,
@@ -219,18 +195,18 @@ const AIChat: React.FC = () => {
         ]);
         setIsLoading(false);
       }, 500);
-      
+
     } catch (error) {
-      console.error("Error calling DeepSeek AI:", error);
-      logError(error as Error, { 
+      console.error("Error calling AI Service:", error);
+      logError(error as Error, {
         userInput: currentInput,
         context: 'ai_chat_request'
       });
-      
+
       // Add fallback response
       setTimeout(() => {
         setMessages(prev => [
-          ...prev, 
+          ...prev,
           {
             id: (Date.now() + 1).toString(),
             text: "I'm sorry, I'm having trouble processing that request right now. Please try again in a moment, or ask me something else about fitness and nutrition!",
@@ -240,7 +216,7 @@ const AIChat: React.FC = () => {
         ]);
         setIsLoading(false);
       }, 500);
-      
+
       toast({
         title: "Connection issue",
         description: "Having trouble connecting to the AI. Please try again.",
@@ -251,7 +227,7 @@ const AIChat: React.FC = () => {
 
   const typingVariants = {
     initial: { opacity: 0 },
-    animate: { 
+    animate: {
       opacity: 1,
       transition: {
         repeat: Infinity,
@@ -264,7 +240,7 @@ const AIChat: React.FC = () => {
   if (showPersonalizationForm) {
     return (
       <div className="w-full max-w-3xl mx-auto">
-        <AnonymousUserForm 
+        <AnonymousUserForm
           onSubmit={handlePersonalizationSubmit}
           onSkip={handleSkipPersonalization}
           isLoading={sessionLoading}
@@ -295,8 +271,8 @@ const AIChat: React.FC = () => {
           )}
         </CardDescription>
         {!user && !anonymousData && (
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => setShowPersonalizationForm(true)}
             className="w-fit"
@@ -318,11 +294,10 @@ const AIChat: React.FC = () => {
                   transition={{ duration: 0.3 }}
                 >
                   <div
-                    className={`${
-                      message.sender === 'user'
-                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-800'
-                    } rounded-lg px-4 py-2 max-w-[80%]`}
+                    className={`${message.sender === 'user'
+                      ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-800'
+                      } rounded-lg px-4 py-2 max-w-[80%]`}
                   >
                     <p className="whitespace-pre-wrap">{message.text}</p>
                     <p className="text-xs opacity-70 mt-1">
@@ -338,7 +313,7 @@ const AIChat: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <div className="bg-gray-200 text-gray-800 rounded-lg px-4 py-2">
-                    <motion.div 
+                    <motion.div
                       className="flex space-x-1"
                       variants={typingVariants}
                       initial="initial"
@@ -354,7 +329,7 @@ const AIChat: React.FC = () => {
             </AnimatePresence>
             <div ref={messagesEndRef} />
           </div>
-          
+
           <form onSubmit={handleSubmit} className="flex items-end gap-2">
             <div className="flex-1">
               <Textarea
@@ -371,8 +346,8 @@ const AIChat: React.FC = () => {
                 }}
               />
             </div>
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-transform hover:scale-105 active:scale-95"
               disabled={isLoading || !input.trim()}
             >

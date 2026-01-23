@@ -1,61 +1,16 @@
 import { WORKOUT_PROMPT, NUTRITION_PROMPT, DASHBOARD_PROMPT } from '@/config/aiPrompts';
-import { UserData } from '@/contexts/UserContextTypes';
+import { UserData, initialUserData } from '@/contexts/UserContextTypes';
 import { agenticEngine } from './AgenticEngine';
-
-export interface AIRecommendation {
-  id?: string;
-  type: 'workout' | 'recipe' | 'dashboard';
-  title: string;
-  description: string;
-  content: any;
-  personalizedFor: string[];
-}
-
-export interface PersonalizedWorkout {
-  id: string;
-  title: string;
-  description: string;
-  duration: string;
-  difficulty: string;
-  category: string;
-  exercises: {
-    name: string;
-    duration?: string;
-    reps?: string;
-    sets?: string;
-    description: string;
-    targetMuscles: string[];
-  }[];
-  benefits: string[];
-  equipment: string[];
-  calories: number;
-}
-
-export interface PersonalizedRecipe {
-  id: string;
-  title: string;
-  description: string;
-  prepTime: string;
-  calories: number;
-  category: 'breakfast' | 'lunch' | 'dinner' | 'snack';
-  dietaryType: 'vegetarian' | 'non-vegetarian' | 'vegan';
-  tags: string[];
-  ingredients: string[];
-  steps: string[];
-  nutritionFacts: {
-    protein: number;
-    carbs: number;
-    fat: number;
-    fiber: number;
-  };
-}
-
-export interface DashboardInsights {
-  personalizedTip: string;
-  recommendedAction: string;
-  progressAnalysis: string;
-  motivationalMessage: string;
-}
+import { getStrictSystemPrompt } from '@/utils/dietaryValidator';
+import { buildTrainerContext } from './aiContextBuilder';
+import { TRAINER_SYSTEM_PROMPT } from '@/config/aiSystemPrompt';
+import { validateSessionSafety } from '@/utils/safetyValidator';
+import {
+  AIRecommendation,
+  PersonalizedWorkout,
+  PersonalizedRecipe,
+  DashboardInsights
+} from '@/types/aiTypes';
 
 class AIService {
   private apiKey: string | null = null;
@@ -64,15 +19,12 @@ class AIService {
   constructor() {
     this.apiKey = import.meta.env.VITE_OPENAI_API_KEY ||
       import.meta.env.VITE_GEMINI_API_KEY ||
-      import.meta.env.VITE_DEEPSEEK_API_KEY ||
       null;
 
     if (import.meta.env.VITE_OPENAI_API_KEY) {
       this.baseURL = 'https://api.openai.com/v1';
     } else if (import.meta.env.VITE_GEMINI_API_KEY) {
       this.baseURL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
-    } else if (import.meta.env.VITE_DEEPSEEK_API_KEY) {
-      this.baseURL = 'https://api.deepseek.com/v1';
     }
   }
 
@@ -82,8 +34,7 @@ class AIService {
 
   private async makeRequest(messages: any[], maxTokens: number = 1000, modelOverride?: string): Promise<string> {
     if (!this.apiKey) {
-      console.error("AI Service Error: No API Key found for OpenAI, Gemini, or DeepSeek.");
-      // Throw explicit error so UI knows to switch to Local ML or prompt user
+      console.error("AI Service Error: No API Key found for OpenAI or Gemini.");
       throw new Error("MISSING_PROVIDER: No AI API configured. Please check .env or use local features.");
     }
 
@@ -107,7 +58,7 @@ class AIService {
           'Authorization': `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
-          model: modelOverride || (import.meta.env.VITE_OPENAI_API_KEY ? 'gpt-3.5-turbo' : 'deepseek-chat'),
+          model: modelOverride || (import.meta.env.VITE_OPENAI_API_KEY ? 'gpt-3.5-turbo' : 'gemini-1.5-flash'),
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
@@ -116,7 +67,6 @@ class AIService {
 
       if (response.status === 429) {
         console.warn("AI Quota Exceeded (429). Switching to Rule-Based Engine.");
-        // Fallback Logic based on content context
         const lastMsg = messages[messages.length - 1].content;
         if (typeof lastMsg === 'string' && lastMsg.includes('recipe')) return JSON.stringify(this.getFallbackRecipes({} as any));
         if (typeof lastMsg === 'string' && lastMsg.includes('workout')) return JSON.stringify(this.getFallbackWorkouts({} as any));
@@ -129,16 +79,50 @@ class AIService {
     } catch (error: any) {
       console.error('AI API Error:', error);
       if (error.message?.includes('429')) {
-        // Double safety catch
         return "QUOTA_EXCEEDED";
       }
       throw new Error(`Failed to get AI response: ${error}`);
     }
   }
 
-  // Public generic chat method
   async chat(messages: any[]): Promise<string> {
     return this.makeRequest(messages, 1500);
+  }
+
+  async generateWeeklyPlan(userData: UserData): Promise<any[]> {
+    console.log("Delegating to Agentic Engine for Weekly Split...");
+    try {
+      const weeklyPrompt = `
+      TASK: Create a 7-Day Workout Split for this user.
+      CONTEXT: User Goal: ${userData.fitnessGoal}, Level: ${userData.activityLevel}, Days Available: ${userData.activityRestrictions || '5 days'}.
+      
+      REQUIREMENTS:
+      1. Return a JSON ARRAY of 7 objects (Day 1 to Day 7).
+      2. Each object MUST strictly follow this schema:
+         {
+           "day": "Monday", 
+           "focus": "Chest & Triceps", 
+           "exercises": [ { "name": "Bench Press", "sets": "3", "reps": "10", "description": "..." } ]
+         }
+      3. Include Rest Days where appropriate.
+      4. Ensure progressive overload logic matches their level.
+      `;
+
+      const response = await this.makeRequest([
+        { role: 'system', content: "You are the Periodization Architect Agent. Generate 7-day splits." },
+        { role: 'user', content: weeklyPrompt }
+      ], 2500, import.meta.env.VITE_GEMINI_API_KEY ? 'gemini-1.5-flash' : 'gpt-4');
+
+      return this.parseJSONResponse(response);
+
+    } catch (error) {
+      console.error('Weekly Plan Generation Failed:', error);
+      return Array(7).fill(null).map((_, i) => ({
+        day: `Day ${i + 1}`,
+        focus: i % 3 === 0 ? "Rest & Recovery" : "Full Body Fundamentals",
+        exercises: this.getFallbackWorkouts(userData)[0].exercises
+      }));
+    }
   }
 
   async generatePersonalizedWorkouts(userData: UserData, count: number = 3, mode: 'strict_profile' | 'guest' = 'strict_profile'): Promise<PersonalizedWorkout[]> {
@@ -165,10 +149,6 @@ class AIService {
     }
   }
 
-  /**
-   * Generate content from natural language search query
-   * Supports both guest mode (query-only) and profile mode (query + profile constraints)
-   */
   async generateFromNaturalLanguage(
     userData: UserData | null,
     query: string,
@@ -177,31 +157,56 @@ class AIService {
   ): Promise<PersonalizedWorkout[] | PersonalizedRecipe[]> {
     const isGuest = mode === 'guest' || !userData;
 
-    // Build profile-aware system prompt
-    const profileContext = isGuest ? '' : `
-USER PROFILE:
-- Diet: ${userData.dietaryPreference} (STRICTLY RESPECT - NO EXCEPTIONS)
-- Fitness Level: ${userData.activityLevel}
-- Medical Conditions: ${userData.medicalConditions || 'None'}
-- Allergies: ${userData.allergies || 'None'}
-- Goal: ${userData.fitnessGoal}
+    // 1. Context Build (Workout Only)
+    let trainerContext = null;
+    if (type === 'workout' && !isGuest) {
+      trainerContext = buildTrainerContext(userData, query);
+    }
 
-CONSTRAINTS:
-- If Vegetarian: NEVER suggest meat, fish, eggs
-- If Vegan: ONLY plant-based ingredients
-- If knee injury: NO jumping, squats, lunges
-- Respect fitness level (don't suggest advanced moves to beginners)
-`;
-
-    const systemPrompt = `You are an elite ${type === 'workout' ? 'personal trainer' : 'nutritionist'}.
-${profileContext}
-USER REQUEST: "${query}"
-
-Return valid JSON matching the schema. Be creative but safe.`;
+    const systemPrompt = type === 'workout' && !isGuest
+      ? `${TRAINER_SYSTEM_PROMPT} \nCONTEXT: ${JSON.stringify(trainerContext)}`
+      : `SYSTEM: You are an elite ${type === 'workout' ? 'personal trainer' : 'nutritionist'}.
+         USER REQUEST: "${query}"
+         TASK: Generate a ${type === 'recipe' ? 'recipe' : 'workout'}.
+         OUTPUT: Return ONLY valid JSON.`;
 
     try {
       if (type === 'workout') {
-        return await this.generatePersonalizedWorkouts(userData || ({} as UserData), 1, mode);
+        const messages = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate a workout for: "${query}"` }
+        ];
+
+        const rawJson = await this.makeRequest(messages, 2000, 'gemini-1.5-flash');
+        const generatedSessions: PersonalizedWorkout[] = this.parseJSONResponse(rawJson);
+        const session = Array.isArray(generatedSessions) ? generatedSessions[0] : generatedSessions;
+
+        // 2. Safety Validation (Workout Only)
+        if (!isGuest && trainerContext) {
+          const safetyCheck = validateSessionSafety(session, userData, trainerContext.readiness_score);
+
+          if (!safetyCheck.safe) {
+            console.warn("Safety Validation Failed:", safetyCheck.reason);
+            if (safetyCheck.modifiedSession) {
+              return [{
+                ...safetyCheck.modifiedSession,
+                trainerNote: `⚠️ ${safetyCheck.reason} Switched to recovery mode.`,
+                readinessScore: trainerContext.readiness_score
+              }];
+            }
+          }
+
+          return [{
+            ...session,
+            trainerNote: trainerContext.readiness_score < 5
+              ? "📉 Low Readiness detected. Lowered volume."
+              : "🚀 High Readiness detected. Push yourself!",
+            readinessScore: trainerContext.readiness_score
+          }];
+        }
+
+        return Array.isArray(generatedSessions) ? generatedSessions : [generatedSessions];
+
       } else {
         return await this.generatePersonalizedRecipes(userData || ({} as UserData), 1, query);
       }
@@ -219,7 +224,6 @@ Return valid JSON matching the schema. Be creative but safe.`;
       const result = await agenticEngine.runWorkflow(userData, 'generate_meal');
       if (!result) throw new Error("Agentic Engine returned null");
 
-      // Enforce dietary restrictions based on profile
       let dietaryType: 'vegetarian' | 'non-vegetarian' | 'vegan' = 'non-vegetarian';
       if (userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Eggetarian') {
         dietaryType = 'vegetarian';
@@ -234,7 +238,7 @@ Return valid JSON matching the schema. Be creative but safe.`;
         prepTime: "20 mins",
         calories: result.calories || 500,
         category: "lunch",
-        dietaryType: dietaryType, // Profile-enforced
+        dietaryType: dietaryType,
         tags: ["Agentic Choice", "Bio-Availabile", userData.dietaryPreference || "Custom"],
         ingredients: result.ingredients || [],
         steps: result.steps || [],
@@ -283,7 +287,6 @@ Return valid JSON matching the schema. Be creative but safe.`;
   }
 
   async generateDashboardInsights(userData: UserData, progressData: any): Promise<DashboardInsights> {
-    // Keep legacy or upgrade later
     return this.getFallbackInsights(userData);
   }
 
@@ -315,8 +318,25 @@ Return valid JSON matching the schema. Be creative but safe.`;
       duration: '30 min',
       difficulty: 'Beginner',
       category: 'General',
-      exercises: [],
-      benefits: ['Movement'],
+      exercises: [
+        {
+          name: "Bodyweight Squats",
+          duration: "45 sec",
+          reps: "15",
+          sets: "3",
+          description: "Stand with feet shoulder-width apart, lower hips back and down.",
+          targetMuscles: ["Quads", "Glutes"]
+        },
+        {
+          name: "Push-ups (or Knee/Wall)",
+          duration: "45 sec",
+          reps: "10",
+          sets: "3",
+          description: "Keep core tight, lower chest to floor.",
+          targetMuscles: ["Chest", "Triceps"]
+        }
+      ],
+      benefits: ['Movement', 'Circulation', 'Stress Relief'],
       equipment: ['None'],
       calories: 100
     }];
@@ -354,8 +374,37 @@ Return valid JSON matching the schema. Be creative but safe.`;
   getConfigurationStatus(): { configured: boolean; provider: string | null } {
     if (import.meta.env.VITE_GEMINI_API_KEY) return { configured: true, provider: 'Google Gemini' };
     if (import.meta.env.VITE_OPENAI_API_KEY) return { configured: true, provider: 'OpenAI' };
-    if (import.meta.env.VITE_DEEPSEEK_API_KEY) return { configured: true, provider: 'DeepSeek' };
     return { configured: false, provider: null };
+  }
+
+  async generate(params: { type: 'meal' | 'workout' | 'nutrition_plan' | 'recipe'; prompt: string; preferences?: any; userId: string }) {
+    console.log(`Generating ${params.type} for ${params.userId}`);
+    const type = params.type === 'workout' ? 'workout' : 'recipe';
+    const userData: UserData = {
+      ...initialUserData,
+      fitnessGoal: params.preferences?.goal || 'General Fitness',
+      dietaryPreference: 'Other',
+      activityLevel: 'Intermediate',
+      age: 30,
+      weight: 70,
+      height: 175,
+      gender: 'Male'
+    };
+
+    return await this.generateFromNaturalLanguage(userData, params.prompt, type as 'workout' | 'recipe');
+  }
+
+  async getGenerationHistory(params: { userId: string; limit: number; offset: number }) {
+    console.log(`Fetching history for ${params.userId}`);
+    return {
+      items: [],
+      total: 0
+    };
+  }
+
+  async deleteGeneratedItem(params: { id: string; userId: string }) {
+    console.log(`Deleting item ${params.id}`);
+    return true;
   }
 }
 

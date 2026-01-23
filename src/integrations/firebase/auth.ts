@@ -18,6 +18,7 @@ import {
   browserSessionPersistence
 } from 'firebase/auth';
 import { auth } from './config';
+export { auth };
 
 // STRICT: Force Local Persistence to prevent "Guest Mode" fallbacks on refresh
 setPersistence(auth, browserLocalPersistence).catch((error) => {

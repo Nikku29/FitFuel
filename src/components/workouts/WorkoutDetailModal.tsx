@@ -61,9 +61,11 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
 
   // Get instructions for current exercise or general instructions if not found
   const getCurrentExerciseInstructions = () => {
-    if (!selectedWorkout) return [];
+    if (!selectedWorkout || !selectedWorkout.exercises || selectedWorkout.exercises.length === 0) return [];
 
-    const currentExercise = selectedWorkout.exercises[activeExerciseIndex].name;
+    const currentExercise = selectedWorkout.exercises[activeExerciseIndex]?.name;
+    if (!currentExercise) return ["Follow general workout safety guidelines."];
+
     return exerciseInstructions[currentExercise] || [
       "Start in the proper position as described for this exercise.",
       "Focus on form rather than speed.",

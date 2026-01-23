@@ -1,291 +1,180 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useUser } from '@/contexts/UserContext';
-import { toast } from "@/hooks/use-toast";
-import { aiService, PersonalizedWorkout } from '@/services/aiService';
+import { useWorkoutScheduler } from '@/hooks/useWorkoutScheduler';
+import QuoteLoader from '@/components/ui/QuoteLoader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Sparkles, AlertCircle, Dumbbell, Clock, Flame } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Calendar, RefreshCw, Dumbbell, Play, Clock, Flame } from 'lucide-react';
 import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
-
-// Import workout data
-import { workoutData, exerciseInstructions } from '@/data/workoutData';
-
-// Import refactored components
+import { toast } from "@/hooks/use-toast";
 import WorkoutDetailModal from '@/components/workouts/WorkoutDetailModal';
-import WorkoutHeader from '@/components/workouts/WorkoutHeader';
-import SearchAndFilter from '@/components/workouts/SearchAndFilter';
-import WorkoutGrid from '@/components/workouts/WorkoutGrid';
 import { useWorkoutTimer } from '@/components/workouts/WorkoutTimerLogic';
-import { filterWorkouts } from '@/utils/workoutFilters';
+import { exerciseInstructions } from '@/data/workoutData';
 
 const WorkoutsPage = () => {
-  const { userData } = useUser();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedWorkout, setSelectedWorkout] = useState<any>(null);
-  const [currentTab, setCurrentTab] = useState('all');
-  const [aiWorkouts, setAiWorkouts] = useState<PersonalizedWorkout[]>([]);
-  const [loadingAi, setLoadingAi] = useState(false);
-  const [showAiWorkouts, setShowAiWorkouts] = useState(false);
-  const [aiConfigured, setAiConfigured] = useState(false);
-  const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
+  const { user, userData } = useUser();
 
-  // Use the workout timer hook
+  // Custom Hook Logic
+  const { todaysWorkout, loading, loadingMessage, regenerateToday } = useWorkoutScheduler(user, userData);
+
+  const [selectedWorkout, setSelectedWorkout] = useState<any>(null);
   const [timerState, timerActions] = useWorkoutTimer();
 
-  // Check AI configuration on component mount
-  useEffect(() => {
-    const config = aiService.getConfigurationStatus();
-    setAiConfigured(config.configured);
-  }, []);
+  const handleStartWorkout = () => {
+    // Transform "Daily Plan" format to "WorkoutDetail" format if needed
+    // or just pass it direct if schema matches
+    // The weekly plan has: { day, focus, exercises: [] }
+    // The Modal expects: { title, exercises: [], ... }
 
-  // Generate AI workouts when user data is available
-  const generateAiWorkouts = async () => {
-    if (!aiConfigured || !userData || loadingAi) return;
+    const workoutModel = {
+      title: todaysWorkout.focus,
+      exercises: todaysWorkout.exercises,
+      duration: '45-60 min', // Estimate
+      difficulty: userData?.activityLevel || 'Intermediate',
+      calories: 300 // Estimate
+    };
 
-    setLoadingAi(true);
-    try {
-      const personalizedWorkouts = await aiService.generatePersonalizedWorkouts(userData, 4);
-      setAiWorkouts(personalizedWorkouts);
-      setShowAiWorkouts(true);
-      toast({
-        title: "AI Workouts Generated!",
-        description: "Your personalized workouts are ready.",
-        duration: 3000,
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to Generate Workouts",
-        description: "Using fallback recommendations instead.",
-        variant: "destructive",
-        duration: 5000,
-      });
-    } finally {
-      setLoadingAi(false);
-    }
-  };
-
-  // Combine AI workouts with static workouts
-  const allWorkouts = showAiWorkouts ? [...aiWorkouts, ...workoutData] : workoutData;
-
-  // Filter workouts based on search term and active tab
-  const filteredWorkouts = filterWorkouts(allWorkouts, searchTerm, currentTab);
-
-  // Handler for selecting a workout
-  const handleSelectWorkout = (workout: any) => {
-    setSelectedWorkout(workout);
-    timerActions.stopTimer();
-    toast({
-      title: "Workout Ready",
-      description: "Get ready to start your workout session!",
-      duration: 3000,
-    });
+    setSelectedWorkout(workoutModel);
   };
 
   return (
-    <motion.div
-      className="min-h-screen bg-gradient-to-b from-white to-purple-100 py-4 md:py-8"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
-    >
-      <div className="container mx-auto px-4">
-        <div className="flex flex-col space-y-6">
-          {/* Header */}
-          <WorkoutHeader userData={userData} />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 p-4 md:p-8">
+      <div className="max-w-4xl mx-auto space-y-8">
 
-          {/* Natural Language Search */}
-          {aiConfigured && (
-            <div className="mb-6">
+        {/* HEADER */}
+        <header>
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
+            Good Morning, {userData?.name ? userData.name.split(' ')[0] : 'Athlete'}.
+          </h1>
+          <p className="text-gray-500 mt-2 flex items-center">
+            <Calendar className="w-4 h-4 mr-2" />
+            Today is <span className="font-semibold text-purple-600 ml-1">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long' })}
+            </span>.
+          </p>
+        </header>
+
+        {/* MAIN CONTENT AREA */}
+        {loading ? (
+          <div className="bg-white rounded-3xl shadow-xl p-8 border border-purple-100">
+            <QuoteLoader message={loadingMessage} />
+          </div>
+        ) : todaysWorkout ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            {/* ACTIVE SESSION CARD */}
+            <Card className="border-0 shadow-2xl bg-white overflow-hidden relative">
+              <div className="absolute top-0 right-0 p-8 opacity-10">
+                <Dumbbell className="w-64 h-64 text-purple-900" />
+              </div>
+
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-bold text-purple-600 tracking-wider uppercase mb-1">
+                      TODAY'S MISSION
+                    </p>
+                    <CardTitle className="text-4xl md:text-5xl font-black text-gray-900 leading-tight">
+                      {todaysWorkout.focus}
+                    </CardTitle>
+                  </div>
+                  <div className="bg-purple-100 p-3 rounded-full">
+                    <Flame className="w-8 h-8 text-purple-600" />
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-6 relative z-10">
+                <div className="flex gap-4 mb-8">
+                  <div className="flex items-center text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
+                    <Clock className="w-4 h-4 mr-2" />
+                    <span>~45 Min</span>
+                  </div>
+                  <div className="flex items-center text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
+                    <Dumbbell className="w-4 h-4 mr-2" />
+                    <span>{todaysWorkout.exercises?.length || 0} Exercises</span>
+                  </div>
+                </div>
+
+                {/* Exercise Preview (First 3) */}
+                <div className="space-y-3 mb-8">
+                  {todaysWorkout.exercises?.slice(0, 3).map((ex: any, idx: number) => (
+                    <div key={idx} className="flex items-center text-gray-700">
+                      <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold mr-3">
+                        {idx + 1}
+                      </div>
+                      <span className="font-medium">{ex.name}</span>
+                      <span className="text-gray-400 mx-2">•</span>
+                      <span className="text-sm text-gray-500">{ex.sets} x {ex.reps}</span>
+                    </div>
+                  ))}
+                  {todaysWorkout.exercises?.length > 3 && (
+                    <p className="text-sm text-gray-400 pl-9">+ {todaysWorkout.exercises.length - 3} more</p>
+                  )}
+                </div>
+              </CardContent>
+
+              <CardFooter className="pb-8 pt-0 relative z-10">
+                <Button
+                  className="w-full h-16 text-lg font-bold bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200"
+                  onClick={handleStartWorkout}
+                >
+                  <Play className="w-5 h-5 mr-3 fill-current" />
+                  Start Session
+                </Button>
+              </CardFooter>
+            </Card>
+
+            {/* THE AUDIBLE BAR (Adjustment) */}
+            <div className="mt-8 bg-white/50 backdrop-blur-md rounded-xl p-6 border border-white shadow-sm">
+              <h3 className="text-sm font-semibold text-gray-500 mb-3 flex items-center">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Need to call an audible?
+              </h3>
               <NaturalLanguageInput
+                placeholder="I'm sore, give me a recovery session instead..."
+                onSearch={(query) => regenerateToday(query)}
                 type="workout"
-                placeholder="✨ Describe your ideal workout (e.g., 'Upper body strength, no equipment')"
-                isLoading={loadingAi}
-                onSearch={async (query) => {
-                  setLoadingAi(true);
-                  try {
-                    const mode = userData?.activityLevel ? 'strict_profile' : 'guest';
-                    const results = await aiService.generateFromNaturalLanguage(
-                      userData,
-                      query,
-                      'workout',
-                      mode
-                    ) as PersonalizedWorkout[];
-                    setAiWorkouts(results);
-                    setShowAiWorkouts(true);
-                    toast({
-                      title: 'Workout Generated!',
-                      description: `Created ${results.length} personalized workout(s) for you.`,
-                    });
-                  } catch (error) {
-                    console.error('Workout generation failed:', error);
-                    toast({
-                      title: 'Generation Failed',
-                      description: 'Could not generate workout. Try again.',
-                      variant: 'destructive'
-                    });
-                  } finally {
-                    setLoadingAi(false);
-                  }
-                }}
               />
             </div>
-          )}
 
-          {/* Profile Banner - Only for authenticated users */}
-          {userData?.activityLevel && (
-            <Alert className="mb-6 bg-purple-50 border-purple-200">
-              <Sparkles className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-purple-800">
-                Showing workouts personalized for your <strong>{userData.activityLevel}</strong> level and <strong>{userData.fitnessGoal || 'fitness'}</strong> goal.
-                {userData.medicalConditions && <span className="ml-2">Avoiding exercises unsafe for: {userData.medicalConditions}</span>}
-                <Link to="/profile" className="ml-2 underline">Update Profile</Link>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* AI Generator FAB */}
-          <div className="fixed bottom-6 right-6 z-40">
+          </motion.div>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-500">No workout scheduled for today. Enjoy your rest!</p>
             <Button
-              onClick={() => setIsGeneratorOpen(true)}
-              className="h-16 w-16 rounded-full shadow-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-105 transition-transform text-white flex items-center justify-center animate-bounce-slow"
+              variant="outline"
+              className="mt-4"
+              onClick={() => regenerateToday("Generate a full body workout")}
             >
-              <Dumbbell size={32} />
+              Generate Manual Session
             </Button>
           </div>
+        )}
+      </div>
 
-          {/* Generator Modal */}
-          {isGeneratorOpen && (
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl"
-              >
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800">Design Session</h3>
-                  <Button variant="ghost" size="sm" onClick={() => setIsGeneratorOpen(false)}>X</Button>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Time</label>
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      {['15 min', '30 min', '45+ min'].map(t => (
-                        <Button key={t} variant="outline" className="text-xs">{t}</Button>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-
-                <Button
-                  className="w-full bg-fitfuel-purple text-white py-6 text-lg mt-4"
-                  onClick={() => {
-                    setIsGeneratorOpen(false);
-                    generateAiWorkouts();
-                  }}
-                  disabled={loadingAi}
-                >
-                  {loadingAi ? 'Designing...' : 'Generate Plan'}
-                </Button>
-              </motion.div>
-            </div>
-          )}
-
-          {/* Manual Log FAB (New) */}
-          <div className="fixed bottom-6 left-6 z-40">
-            <Button
-              className="h-14 w-14 rounded-full shadow-xl bg-white text-purple-600 hover:bg-purple-50 border border-purple-200"
-              onClick={() => toast({ title: "Manual Logging", description: "Manual workout logger coming soon!" })}
-            >
-              <span className="text-3xl font-light">+</span>
-            </Button>
-          </div>
-
-          {/* AI Config Alert or Status */}
-          {aiConfigured && !userData && (
-            <Alert className="mt-4 bg-purple-50 border-purple-200">
-              <AlertCircle className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-purple-800">
-                Tip: Complete your profile for better AI accuracy. <Link to="/profile" className="underline">Update Profile</Link>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* AI Generated Workouts Loading */}
-          {loadingAi && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <Card key={index} className="overflow-hidden">
-                  <CardHeader>
-                    <Skeleton className="h-6 w-3/4" />
-                    <Skeleton className="h-4 w-full" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-2">
-                        <Skeleton className="h-4 w-4" />
-                        <Skeleton className="h-4 w-16" />
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Skeleton className="h-4 w-4" />
-                        <Skeleton className="h-4 w-20" />
-                      </div>
-                      <div className="flex gap-2">
-                        <Skeleton className="h-6 w-16" />
-                        <Skeleton className="h-6 w-16" />
-                      </div>
-                      <Skeleton className="h-10 w-full" />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-
-          {/* Search and Filter - Guest-Aware */}
-          {!userData?.activityLevel && (
-            <SearchAndFilter
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              currentTab={currentTab}
-              setCurrentTab={setCurrentTab}
-            />
-          )}
-
-          {/* Workouts Grid */}
-          <WorkoutGrid
-            filteredWorkouts={filteredWorkouts}
-            onSelectWorkout={handleSelectWorkout}
-          />
-        </div>
-      </div >
-
-      {/* Workout Detail Modal */}
-      {
-        selectedWorkout && (
-          <WorkoutDetailModal
-            selectedWorkout={selectedWorkout}
-            onClose={() => setSelectedWorkout(null)}
-            exerciseInstructions={exerciseInstructions}
-            time={timerState.time}
-            isRunning={timerState.isRunning}
-            isBreakTime={timerState.isBreakTime}
-            breakTime={timerState.breakTime}
-            startTimer={timerActions.startTimer}
-            pauseTimer={timerActions.pauseTimer}
-            stopTimer={timerActions.stopTimer}
-            startBreakTimer={timerActions.startBreakTimer}
-          />
-        )
-      }
-    </motion.div >
+      {/* Workout Detail Modal (Reused) */}
+      {selectedWorkout && (
+        <WorkoutDetailModal
+          selectedWorkout={selectedWorkout}
+          onClose={() => setSelectedWorkout(null)}
+          exerciseInstructions={exerciseInstructions}
+          time={timerState.time}
+          isRunning={timerState.isRunning}
+          isBreakTime={timerState.isBreakTime}
+          breakTime={timerState.breakTime}
+          startTimer={timerActions.startTimer}
+          pauseTimer={timerActions.pauseTimer}
+          stopTimer={timerActions.stopTimer}
+          startBreakTimer={timerActions.startBreakTimer}
+        />
+      )}
+    </div>
   );
 };
 

@@ -52,6 +52,16 @@ class BioDataSentinel {
             if (user.medicalConditions?.toLowerCase().includes('diabetes')) {
                 warnings.push("Glycemic index cap enforced.");
             }
+            // Strict Dietary Enforcement
+            if (user.dietaryPreference === 'Vegan') {
+                warnings.push("CRITICAL: VEGAN PROTOCOL. NO Animal Products (Meat, Eggs, Dairy).");
+            }
+            if (['Veg', 'Vegetarian', 'Eggetarian'].includes(user.dietaryPreference)) {
+                warnings.push("CRITICAL: VEGETARIAN PROTOCOL. NO Meat/Fish.");
+                if (user.dietaryPreference === 'Veg') {
+                    warnings.push("NO EGGS allowed (strict Veg).");
+                }
+            }
         }
 
         return { safe: warnings.length === 0, warnings };
@@ -101,10 +111,9 @@ export class AgenticEngine {
     private baseUrl: string;
 
     constructor() {
-        // PRIORITY: Gemini -> OpenAI -> DeepSeek
+        // PRIORITY: Gemini -> OpenAI
         const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
         const openAIKey = import.meta.env.VITE_OPENAI_API_KEY;
-        const deepSeekKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
 
         if (geminiKey) {
             this.apiKey = geminiKey;
@@ -112,9 +121,6 @@ export class AgenticEngine {
         } else if (openAIKey) {
             this.apiKey = openAIKey;
             this.baseUrl = 'https://api.openai.com/v1';
-        } else if (deepSeekKey) {
-            this.apiKey = deepSeekKey;
-            this.baseUrl = 'https://api.deepseek.com/v1';
         } else {
             this.apiKey = '';
             this.baseUrl = '';
@@ -205,7 +211,7 @@ export class AgenticEngine {
 
         const url = isGemini ? `${this.baseUrl}?key=${this.apiKey}` : `${this.baseUrl}/chat/completions`;
 
-        console.log(`[AgenticEngine] Calling AI Provider: ${isGemini ? 'Gemini' : 'OpenAI/DeepSeek'}`);
+        console.log(`[AgenticEngine] Calling AI Provider: ${isGemini ? 'Gemini' : 'OpenAI'}`);
         console.log(`[AgenticEngine] Endpoint: ${url}`);
 
         const response = await fetch(url, {

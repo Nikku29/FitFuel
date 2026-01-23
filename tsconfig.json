@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "types": [
       "vite/client",
-      "webrtc"
+      "node"
     ],
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -24,7 +24,13 @@
     "strict": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
   "include": [
     "src"

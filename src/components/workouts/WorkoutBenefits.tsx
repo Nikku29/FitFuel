@@ -8,7 +8,7 @@ interface WorkoutBenefitsProps {
 
 const WorkoutBenefits: React.FC<WorkoutBenefitsProps> = ({ benefits }) => {
   return (
-    <motion.div 
+    <motion.div
       className="mb-6"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -16,8 +16,8 @@ const WorkoutBenefits: React.FC<WorkoutBenefitsProps> = ({ benefits }) => {
     >
       <h3 className="text-lg font-semibold mb-2">Benefits</h3>
       <ul className="list-disc pl-5 space-y-1">
-        {benefits.map((benefit: string, index: number) => (
-          <motion.li 
+        {(benefits || []).map((benefit: string, index: number) => (
+          <motion.li
             key={index}
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}

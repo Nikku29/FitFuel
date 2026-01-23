@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { validateRequest } from '../middleware/validation';
-import { authenticateToken } from '../middleware/auth';
-import { aiService } from '../services/aiService';
-import { logger } from '../utils/logger';
+import { validateRequest } from '../../middleware/validation';
+import { authenticateToken } from '../../middleware/auth';
+import { aiService } from '../../services/aiService';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 
@@ -113,7 +113,7 @@ router.get('/history', authenticateToken, async (req: Request, res: Response) =>
  */
 router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = (req as any).userId;
 
     logger.info(`Deleting generated item ${id} for user ${userId}`);

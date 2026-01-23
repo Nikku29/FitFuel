@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { aiService, DashboardInsights } from '@/services/aiService';
+import { aiService } from '@/services/aiService';
+import { DashboardInsights } from '@/types/aiTypes';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUserWorkoutLogs, WorkoutLog } from '@/integrations/firebase/firestore';
@@ -178,7 +179,17 @@ const Dashboard = () => {
     });
   }
 
-  const handleCapture = async (imageSrc: string) => {
+  const handleCapture = async (data: { type: 'barcode' | 'vision'; value: string; confidence?: number }) => {
+    // If it's a barcode, we might handle differently, but assuming value is text/code.
+    // However, existing code treated it as imageSrc. 
+    // If type is 'vision', value is base64 image.
+    const imageSrc = data.type === 'vision' ? data.value : null;
+
+    if (!imageSrc) {
+      toast({ title: "Barcode Scanned", description: data.value });
+      return;
+    }
+
     setScannedImage(imageSrc);
     setIsAnalyzing(true);
 

@@ -19,7 +19,7 @@ const WorkoutInfoHeader: React.FC<WorkoutInfoHeaderProps> = ({
 }) => {
   // Get background color based on workout type
   const getTypeColor = (type: string) => {
-    switch(type.toLowerCase()) {
+    switch (type.toLowerCase()) {
       case 'cardio':
         return 'bg-red-500';
       case 'strength':
@@ -49,19 +49,19 @@ const WorkoutInfoHeader: React.FC<WorkoutInfoHeaderProps> = ({
         />
         <div className="absolute inset-0 bg-gradient-to-r from-purple-700 to-indigo-700 opacity-60" />
       </div>
-      <motion.div 
+      <motion.div
         className="relative p-6 text-white"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
       >
         <div className="flex flex-wrap gap-2 mb-2">
-          <Badge className={`${getTypeColor(workout.type)} text-white`}>
-            {workout.type.charAt(0).toUpperCase() + workout.type.slice(1)}
+          <Badge className={`${getTypeColor(workout.type || 'general')} text-white`}>
+            {(workout.type || 'General').charAt(0).toUpperCase() + (workout.type || 'General').slice(1)}
           </Badge>
-          <Badge className={workout.level === 'beginner' ? 'bg-green-500' : 
-                           workout.level === 'intermediate' ? 'bg-yellow-500' : 'bg-red-500'}>
-            {workout.level.charAt(0).toUpperCase() + workout.level.slice(1)}
+          <Badge className={(workout.level || (workout as any).difficulty || 'beginner').toLowerCase() === 'beginner' ? 'bg-green-500' :
+            (workout.level || (workout as any).difficulty || 'beginner').toLowerCase() === 'intermediate' ? 'bg-yellow-500' : 'bg-red-500'}>
+            {(workout.level || (workout as any).difficulty || 'Beginner').charAt(0).toUpperCase() + (workout.level || (workout as any).difficulty || 'Beginner').slice(1)}
           </Badge>
         </div>
         <h2 className="text-3xl font-bold mb-2 drop-shadow-md">{workout.title}</h2>

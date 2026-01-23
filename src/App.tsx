@@ -11,7 +11,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Home from "./pages/Home";
 import Login from "./pages/Auth/Login";
 import Signup from "./pages/Auth/Signup";
-import Assistant from "./pages/Assistant";
+// import Assistant from "./pages/Assistant";
 import Dashboard from "./pages/Dashboard";
 import Recipes from "./pages/Recipes";
 import Workouts from "./pages/Workouts";
@@ -73,6 +73,7 @@ const AnimatedRoutes = () => {
 };
 
 const App = () => {
+  console.log('Build: App component rendering...');
   // Initialize production optimizations
   useEffect(() => {
     initializeProductionOptimizations();

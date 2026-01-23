@@ -440,3 +440,39 @@ export const logNutrition = async (log: Omit<NutritionLog, 'id' | 'created_at'>)
     return { id: null, error };
   }
 };
+
+/**
+ * Save AI-generated recipe to user's collection
+ */
+export const saveAiRecipe = async (userId: string, recipe: any) => {
+  try {
+    const docRef = await addDoc(collection(db, 'ai_recipes'), {
+      userId,
+      ...recipe,
+      created_at: Timestamp.now(),
+      source: 'ai_generated'
+    });
+    return { id: docRef.id, error: null };
+  } catch (error) {
+    console.error('Error saving AI recipe:', error);
+    return { id: null, error };
+  }
+};
+
+/**
+ * Save AI-generated workout plan
+ */
+export const saveAiWorkout = async (userId: string, workout: any) => {
+  try {
+    const docRef = await addDoc(collection(db, 'workout_plans'), {
+      userId,
+      ...workout,
+      created_at: Timestamp.now(),
+      source: 'ai_generated'
+    });
+    return { id: docRef.id, error: null };
+  } catch (error) {
+    console.error('Error saving AI workout:', error);
+    return { id: null, error };
+  }
+};

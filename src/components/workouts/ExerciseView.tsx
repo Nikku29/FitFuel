@@ -35,6 +35,17 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
 }) => {
   const [completed, setCompleted] = useState(false);
 
+  // Guard Clause for empty/undefined exercise (e.g. Rest Day or AI failure)
+  if (!exercise) {
+    return (
+      <div className="border rounded-lg p-8 bg-gray-50 text-center shadow-sm">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-green-500 mb-4" />
+        <h4 className="font-medium text-xl text-gray-800 mb-2">Session Complete / Rest Day</h4>
+        <p className="text-gray-500">No specific exercises scheduled for this session.</p>
+      </div>
+    );
+  }
+
   const handleComplete = () => {
     setCompleted(true);
     setTimeout(() => {
@@ -46,7 +57,7 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
 
   return (
     <AnimatePresence mode="wait">
-      <motion.div 
+      <motion.div
         className="border rounded-lg p-4 bg-gradient-to-r from-purple-50 to-indigo-50 shadow-sm"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -55,7 +66,7 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
         key={activeExerciseIndex}
       >
         <div className="flex justify-between items-start mb-2">
-          <motion.h4 
+          <motion.h4
             className="font-medium text-xl text-purple-800"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -64,15 +75,15 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
             {activeExerciseIndex + 1}. {exercise.name}
           </motion.h4>
         </div>
-        
-        <ExerciseInstructions 
+
+        <ExerciseInstructions
           showInstructions={showInstructions}
           toggleInstructions={toggleInstructions}
           instructions={instructions}
           exerciseName={exercise.name}
         />
-        
-        <motion.p 
+
+        <motion.p
           className="text-gray-600 mb-2"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -80,7 +91,7 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
         >
           Duration: {exercise.duration}
         </motion.p>
-        <motion.p 
+        <motion.p
           className="text-gray-700 mb-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -89,8 +100,8 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
           {exercise.description}
         </motion.p>
         <div className="flex justify-between">
-          <MotionButton 
-            variant="outline" 
+          <MotionButton
+            variant="outline"
             disabled={activeExerciseIndex === 0}
             onClick={onPrev}
             whileHover={{ scale: 1.05 }}
@@ -99,7 +110,7 @@ const ExerciseView: React.FC<ExerciseViewProps> = ({
           >
             <ArrowLeft className="mr-1 h-4 w-4" /> Previous
           </MotionButton>
-          
+
           {activeExerciseIndex === totalExercises - 1 ? (
             <MotionButton
               onClick={handleComplete}
