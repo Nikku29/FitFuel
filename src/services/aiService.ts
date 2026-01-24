@@ -9,8 +9,10 @@ import {
   AIRecommendation,
   PersonalizedWorkout,
   PersonalizedRecipe,
-  DashboardInsights
+  DashboardInsights,
+  AIChatMessage
 } from '@/types/aiTypes';
+import { UIGenerator } from './uiGenerator';
 
 class AIService {
   private apiKey: string | null = null;
@@ -32,7 +34,7 @@ class AIService {
     return this.apiKey !== null;
   }
 
-  private async makeRequest(messages: any[], maxTokens: number = 1000, modelOverride?: string): Promise<string> {
+  private async makeRequest(messages: AIChatMessage[], maxTokens: number = 1000, modelOverride?: string): Promise<string> {
     if (!this.apiKey) {
       console.error("AI Service Error: No API Key found for OpenAI or Gemini.");
       throw new Error("MISSING_PROVIDER: No AI API configured. Please check .env or use local features.");
@@ -40,17 +42,60 @@ class AIService {
 
     try {
       if (this.baseURL.includes('googleapis')) {
-        const lastMsg = messages[messages.length - 1].content;
-        const response = await fetch(`${this.baseURL}?key=${this.apiKey}`, {
+        // Map messages to Gemini format
+        // Handle System Prompt by prepending to first user message (Gemini REST best practice for simple usage)
+        let geminiContents: { role: string; parts: { text: string }[] }[] = [];
+        let systemInstruction = "";
+
+        for (const msg of messages) {
+          if (msg.role === 'system') {
+            systemInstruction += `${msg.content}\n\n`;
+          } else {
+            const role = msg.role === 'assistant' ? 'model' : 'user';
+            // If there's a pending system instruction, prepend it to the next user message
+            let text = msg.content;
+            if (systemInstruction && role === 'user' && geminiContents.length === 0) {
+              text = `${systemInstruction} ${text}`;
+              systemInstruction = ""; // Clear it
+            }
+
+            geminiContents.push({
+              role: role,
+              parts: [{ text: text }]
+            });
+          }
+        }
+
+        // Fallback: If no user message was found to attach system prompt, just attach it as user
+        if (systemInstruction) {
+          geminiContents.unshift({ role: 'user', parts: [{ text: systemInstruction }] });
+        }
+
+        const url = `${this.baseURL}?key=${this.apiKey}`;
+
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: typeof lastMsg === 'string' ? lastMsg : JSON.stringify(lastMsg) }] }] })
+          body: JSON.stringify({
+            contents: geminiContents,
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature: 0.7
+            }
+          })
         });
-        if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Gemini API Error (${response.status}):`, errorText);
+          throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+        }
+
         const data = await response.json();
         return data.candidates[0].content.parts[0].text;
       }
 
+      // OpenAI Logic (Conversational)
       const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -81,11 +126,11 @@ class AIService {
       if (error.message?.includes('429')) {
         return "QUOTA_EXCEEDED";
       }
-      throw new Error(`Failed to get AI response: ${error}`);
+      throw error;
     }
   }
 
-  async chat(messages: any[]): Promise<string> {
+  async chat(messages: AIChatMessage[]): Promise<string> {
     return this.makeRequest(messages, 1500);
   }
 
@@ -131,18 +176,7 @@ class AIService {
       const result = await agenticEngine.runWorkflow(userData, 'generate_workout');
       if (!result) throw new Error("Agentic Engine returned null");
 
-      return [{
-        id: result.id || `ai-workout-${Date.now()}`,
-        title: result.title,
-        description: result.focus || "AI Optimized Session",
-        duration: "45-60 min",
-        difficulty: userData.activityLevel || "Intermediate",
-        category: "Personalized",
-        exercises: result.exercises || [],
-        benefits: ["Bio-Mechanically Matched", "Goal Aligned", "Recovery Aware"],
-        equipment: ["Dynamic"],
-        calories: 300
-      } as PersonalizedWorkout];
+      return [UIGenerator.generateWorkoutCard(result)];
     } catch (error) {
       console.error('Agentic Engine Generation Failed:', error);
       return this.getFallbackWorkouts(userData);
@@ -224,26 +258,7 @@ class AIService {
       const result = await agenticEngine.runWorkflow(userData, 'generate_meal');
       if (!result) throw new Error("Agentic Engine returned null");
 
-      let dietaryType: 'vegetarian' | 'non-vegetarian' | 'vegan' = 'non-vegetarian';
-      if (userData.dietaryPreference === 'Veg' || userData.dietaryPreference === 'Eggetarian') {
-        dietaryType = 'vegetarian';
-      } else if (userData.dietaryPreference === 'Vegan') {
-        dietaryType = 'vegan';
-      }
-
-      return [{
-        id: result.id || `ai-recipe-${Date.now()}`,
-        title: result.title || "Chef's Special",
-        description: result.description || "Macronutrient matched meal.",
-        prepTime: "20 mins",
-        calories: result.calories || 500,
-        category: "lunch",
-        dietaryType: dietaryType,
-        tags: ["Agentic Choice", "Bio-Availabile", userData.dietaryPreference || "Custom"],
-        ingredients: result.ingredients || [],
-        steps: result.steps || [],
-        nutritionFacts: result.nutritionFacts || { protein: 30, carbs: 40, fat: 15, fiber: 5 }
-      } as PersonalizedRecipe];
+      return [UIGenerator.generateRecipeCard(result)];
     } catch (error) {
       console.error('Agentic Engine Recipe Failed:', error);
       return this.getFallbackRecipes(userData);

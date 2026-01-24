@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Camera, Search, Loader2, X } from 'lucide-react';
@@ -26,11 +27,37 @@ const NaturalLanguageInput: React.FC<NaturalLanguageInputProps> = ({
     const videoRef = useRef<HTMLVideoElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
+    const navigate = useNavigate();
+
+    // MoE Router Logic: Simple vs Complex
+    const checkComplexity = (text: string): boolean => {
+        const complexKeywords = ['pain', 'injury', 'hurt', 'ache', 'sick', 'tired', 'pregnant', 'travel', 'hotel', 'substitute', 'hate', 'instead', 'why', 'how'];
+        const isLong = text.length > 60;
+        const hasKeyword = complexKeywords.some(keyword => text.toLowerCase().includes(keyword));
+        const isQuestion = text.includes('?');
+
+        return isLong || hasKeyword || isQuestion;
+    };
+
     const handleSearch = () => {
-        if (query.trim()) {
-            onSearch(query.trim());
-            setQuery('');
+        if (!query.trim()) return;
+
+        // Route to AI Assistant if query is complex
+        if (checkComplexity(query.trim())) {
+            toast({
+                title: "Thinking Deeply...",
+                description: "This looks complex. Let's discuss it with your AI Coach.",
+                duration: 2000
+            });
+            setTimeout(() => {
+                navigate('/ai-onboarding', { state: { initialQuery: query.trim() } });
+            }, 800);
+            return;
         }
+
+        // Otherwise, standard quick generation
+        onSearch(query.trim());
+        setQuery('');
     };
 
     const handleKeyPress = (e: React.KeyboardEvent) => {

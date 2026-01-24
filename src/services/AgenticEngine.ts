@@ -1,117 +1,85 @@
 import { UserData } from '../contexts/UserContextTypes';
+import { SafetySanitizer } from './SafetySanitizer';
 
-// --- 1. THE SCHEMAS (Native TypeScript Interfaces) ---
+// --- 1. THE EXPERTS (The MoE Layer) ---
 
-interface SafetyCheckResult {
-    safe: boolean;
-    warnings: string[];
-    modified_plan?: any;
-}
-
-interface MacroCycle {
-    cycle_name: string;
-    primary_focus: string;
-    duration_weeks: number;
-    sessions_per_week: number;
-}
-
-interface DailySession {
-    id: string;
-    title: string;
-    focus: string;
-    exercises: {
-        name: string;
-        sets: string;
-        reps: string;
-        tempo?: string;
-        notes?: string;
-    }[];
-    recovery_score_required?: number;
-}
-
-// --- 2. THE AGENTS (The "Brain") ---
-
-class BioDataSentinel {
-    // Hard-coded safety rules (O(1) validations)
-    static validate(user: UserData, planType: 'workout' | 'nutrition'): SafetyCheckResult {
-        const warnings: string[] = [];
-
-        if (planType === 'workout') {
-            if (user.medicalConditions?.toLowerCase().includes('knee')) {
-                warnings.push("Knee injury detected. High-impact jumps and deep heavy squats effectively pruned.");
-            }
-            if (user.medicalConditions?.toLowerCase().includes('back')) {
-                warnings.push("Back issue detected. Spinal loading minimized.");
-            }
+class TrainerExpert {
+    static getSystemPrompt(user: UserData): string {
+        return `
+    ROLE: Elite Strength & Conditioning Coach.
+    MISSION: Construct a high-fidelity workout session based on physiological principles.
+    USER: Level=${user.activityLevel}, Goal=${Array.isArray(user.fitnessGoal) ? user.fitnessGoal.join(',') : user.fitnessGoal}, Biometrics=[${user.weight}kg, ${user.height}cm].
+    
+    STRICT PHYSIOLOGICAL RULES:
+    1. VOLUME MATH: 
+       - Beginner: 3 Sets/exercise. 
+       - Intermediate: 4 Sets.
+       - Advanced: 5 Sets.
+    2. REST LOGIC: 
+       - Output 'rest_seconds' explicitly. 
+       - Standard: 60s. Compounds: 90s.
+    3. LOAD CALCULATION:
+       - Suggest weight as % of Bodyweight (BW) or specific KG if known.
+       - e.g., "Squat: 50% BW"
+    4. NO LAZINESS:
+       - NEVER output "1 Set". Minimum is 3.
+    
+    REQUIRED JSON OUTPUT:
+    {
+      "title": "String",
+      "difficulty": "Beginner|Intermediate|Advanced",
+      "duration": "String",
+      "calories": Number,
+      "exercises": [
+        { 
+           "name": "String", 
+           "sets": "String (Int)", 
+           "reps": "String", 
+           "rest_seconds": Number,
+           "suggested_weight": "String",
+           "description": "String" 
         }
-
-        if (planType === 'nutrition') {
-            if (user.allergies?.toLowerCase().includes('nut')) {
-                warnings.push("CRITICAL: Nut-free protocol enforced.");
-            }
-            if (user.medicalConditions?.toLowerCase().includes('diabetes')) {
-                warnings.push("Glycemic index cap enforced.");
-            }
-            // Strict Dietary Enforcement
-            if (user.dietaryPreference === 'Vegan') {
-                warnings.push("CRITICAL: VEGAN PROTOCOL. NO Animal Products (Meat, Eggs, Dairy).");
-            }
-            if (['Veg', 'Vegetarian', 'Eggetarian'].includes(user.dietaryPreference)) {
-                warnings.push("CRITICAL: VEGETARIAN PROTOCOL. NO Meat/Fish.");
-                if (user.dietaryPreference === 'Veg') {
-                    warnings.push("NO EGGS allowed (strict Veg).");
-                }
-            }
-        }
-
-        return { safe: warnings.length === 0, warnings };
+      ],
+      "agentic_insight": "String (Rationale)"
+    }`;
     }
 }
 
-class PeriodizationArchitect {
-    // Mifflin-St Jeor & Volume Load Logic
-    static calculateBaselines(user: UserData) {
-        // Simple BMR calc for demo
-        let bmr = 1500;
-        if (user.weight && user.height && user.age && user.gender) {
-            // Mifflin-St Jeor Reference
-            const s = user.gender === 'Male' ? 5 : -161;
-            bmr = (10 * user.weight) + (6.25 * user.height) - (5 * user.age) + s;
-        }
-
-        return {
-            daily_calories: Math.round(bmr * 1.2), // Baseline multiplier
-            volume_tier: user.activityLevel === 'Advanced' ? 'High' : 'Moderate'
-        };
+class DietitianExpert {
+    static getSystemPrompt(user: UserData): string {
+        return `
+    ROLE: Clinical Dietitian.
+    MISSION: Construct a precision meal plan.
+    USER: Diet=${user.dietaryPreference}, Allergies=${user.allergies}, Goal=${Array.isArray(user.fitnessGoal) ? user.fitnessGoal.join(',') : user.fitnessGoal}.
+    
+    STRICT NUTRITIONAL RULES:
+    1. MACRO MATH:
+       - Ensure Caloric Balance matches goal (Deficit for Weight Loss, Surplus for Muscle).
+    2. PORTION CONTROL:
+       - Output exact grams/cups. "Handful" is forbidden.
+    3. SEARCH SIMULATION:
+       - If user requests generic food, provide standard nutritional data.
+    
+    REQUIRED JSON OUTPUT:
+    {
+      "title": "String",
+      "calories": Number,
+      "prepTime": "String",
+      "ingredients": ["String"],
+      "steps": ["String"],
+      "nutritionFacts": { "protein": Number, "carbs": Number, "fat": Number },
+      "agentic_insight": "String"
+    }`;
     }
 }
 
-class ReactiveCoach {
-    // State Machine for Daily adjustments
-    static adjustSession(user: UserData, basePlan: any, feedback?: string) {
-        // If user is at Home, enforce Bodyweight Strategy
-        if (user.location?.toLowerCase().includes('home') || feedback?.includes('travel')) {
-            return {
-                ...basePlan,
-                title: `${basePlan.title} (Home Edit)`,
-                exercises: basePlan.exercises.map((ex: any) => ({
-                    ...ex,
-                    name: ex.name.replace('Barbell', 'Dumbbell').replace('Machine', 'Band')
-                }))
-            };
-        }
-        return basePlan;
-    }
-}
-
-// --- 3. THE ENGINE (The Orchestrator) ---
+// --- 2. THE ROUTER (The Orchestrator) ---
 
 export class AgenticEngine {
     private apiKey: string;
     private baseUrl: string;
 
     constructor() {
-        // PRIORITY: Gemini -> OpenAI
         const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
         const openAIKey = import.meta.env.VITE_OPENAI_API_KEY;
 
@@ -124,95 +92,47 @@ export class AgenticEngine {
         } else {
             this.apiKey = '';
             this.baseUrl = '';
-            console.warn("AgenticEngine: No API Key found.");
         }
     }
 
     async runWorkflow(user: UserData, intent: 'generate_workout' | 'generate_meal'): Promise<any> {
-        if (!this.apiKey) {
-            throw new Error("No AI Identity found. Please configure your API Key.");
-        }
+        if (!this.apiKey) throw new Error("AI Identity Missing (No API Key).");
 
-        // Step 1: Sentinel Scan (Safety Layer)
-        const safetyCheck = BioDataSentinel.validate(user, intent === 'generate_workout' ? 'workout' : 'nutrition');
+        // 1. Router Logic: Select Expert
+        const systemPrompt = intent === 'generate_workout'
+            ? TrainerExpert.getSystemPrompt(user)
+            : DietitianExpert.getSystemPrompt(user);
 
-        // Step 2: Architect Calculation (Strategy Layer)
-        const baselines = PeriodizationArchitect.calculateBaselines(user);
+        console.log(`[AgenticEngine] Routing to ${intent === 'generate_workout' ? 'Trainer' : 'Dietitian'} Expert...`);
 
-        // Step 3: LLM Generation (Cognitive Multi-Agent Architecture)
-        const systemPrompt = `
-      # FitFuel Neural-Fitness Orchestrator (v2.0)
-      
-      I. CORE IDENTITY & MISSION
-      You are the FitFuel Orchestrator, a state-of-art Health Intelligence Engine. Your mission is to function as a real-time, proactive personal assistant, dietitian, and gym coach. Each plan must be a unique, physiological solution.
-
-      II. COGNITIVE MULTI-AGENT ARCHITECTURE (Simulate these 5 Agents):
-      
-      1. Bio-Data Sentinel (BDS) [SAFETY]
-         - Role: Safety, Compliance, Guardrails.
-         - Logic: O(1) valdiation. IF user has '${user.medicalConditions || 'none'}', REJECT contraindications.
-         - Warnings Active: ${JSON.stringify(safetyCheck.warnings)}
-         
-      2. Periodization Architect (PA) [STRATEGY]
-         - Role: Long-term Macro-cycle.
-         - Baseline BMR: ${baselines.daily_calories} kcal.
-         - Volume Tier: ${baselines.volume_tier}.
-         - Directive: Ensure progressive overload (+2.5-5% intensity).
-
-      3. Reactive Coach (RC) [TACTICS]
-         - Role: Daily Tactical Adaptation.
-         - Context: User Location is '${user.location || 'Gym'}'.
-         - Logic: If 'Home', use Bodyweight/Limited Equipment. If 'Gym', use Barbell/Machines.
-         
-      4. Liaison Agent (LA) [HUMANIZER]
-         - Role: Human-Intelligence Interface.
-         - Directive: Translate JSON into human insights. Explain *why* a change was made.
-         
-      5. Entropy Controller (EC) [VARIETY]
-         - Role: Variety & Engagement.
-         - Directive: Swap exercises with similar biomechanics to prevent staleness.
-
-      III. OPERATIONAL INSTRUCTION SET
-      - Format: Return strictly valid JSON.
-      - Tone: Professional, blunt, directive. No filler words.
-      
-      TASK: Generate a ${intent === 'generate_workout' ? 'High-Fidelity Workout Session' : 'Nutritionally Precision Meal Plan'} for this user.
-      User Profile: ${JSON.stringify(user)}
-    `;
-
+        // 2. Expert Generation
         try {
-            const result = await this.callLLM(systemPrompt);
+            const rawPlan = await this.callLLM(systemPrompt);
 
-            // Step 4: Liaison Layer (Humanizer is explicitly requested in prompt, but we reinforce it here)
-            return {
-                ...result,
-                agentic_insight: safetyCheck.warnings.length > 0
-                    ? `[System Audit]: ${safetyCheck.warnings.join('. ')} Adjusted plan accordingly.`
-                    : "[System Insight]: Optimized for your current macro-cycle."
-            };
+            // 3. Logic Firewall (Sanitization)
+            // Even Experts make mistakes. Verify with local math.
+            if (intent === 'generate_workout') {
+                return SafetySanitizer.sanitizeSession(rawPlan);
+            }
 
+            return rawPlan;
         } catch (e) {
-            console.error("Agentic Flow Failed", e);
-            return null;
+            console.error("Expert Agent Failed:", e);
+            throw e;
         }
     }
 
     private async callLLM(prompt: string): Promise<any> {
-        // Universal Fetch Wrapper handling Gemini vs OpenAI structures
         const isGemini = this.baseUrl.includes('goog');
-
         const body = isGemini
             ? { contents: [{ parts: [{ text: prompt }] }] }
             : {
-                model: 'gpt-3.5-turbo', // or dynamic
+                model: 'gpt-3.5-turbo',
                 messages: [{ role: 'system', content: prompt }],
                 temperature: 0.7
             };
 
         const url = isGemini ? `${this.baseUrl}?key=${this.apiKey}` : `${this.baseUrl}/chat/completions`;
-
-        console.log(`[AgenticEngine] Calling AI Provider: ${isGemini ? 'Gemini' : 'OpenAI'}`);
-        console.log(`[AgenticEngine] Endpoint: ${url}`);
 
         const response = await fetch(url, {
             method: 'POST',
@@ -220,20 +140,15 @@ export class AgenticEngine {
             body: JSON.stringify(body)
         });
 
-        if (!response.ok) {
-            const errText = await response.text();
-            console.error(`[AgenticEngine] API Error (${response.status}):`, errText);
-            throw new Error(`AI Connection Refused (${response.status}): ${errText}`);
-        }
-
-        console.log(`[AgenticEngine] Response Status: ${response.status}`);
+        if (!response.ok) throw new Error(`AI API Error: ${response.status}`);
 
         const data = await response.json();
         const rawText = isGemini
-            ? data.candidates[0].content.parts[0].text
-            : data.choices[0].message.content;
+            ? data.candidates?.[0]?.content?.parts?.[0]?.text
+            : data.choices?.[0]?.message?.content;
 
-        // Clean JSON
+        if (!rawText) throw new Error("Empty response from AI Provider.");
+
         const jsonString = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         return JSON.parse(jsonString);
     }

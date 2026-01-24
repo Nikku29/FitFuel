@@ -13,6 +13,8 @@ import WorkoutDetailModal from '@/components/workouts/WorkoutDetailModal';
 import { useWorkoutTimer } from '@/components/workouts/WorkoutTimerLogic';
 import { exerciseInstructions } from '@/data/workoutData';
 
+import { visualAssetService } from '@/services/VisualAssetService';
+
 const WorkoutsPage = () => {
   const { user, userData } = useUser();
 
@@ -22,11 +24,13 @@ const WorkoutsPage = () => {
   const [selectedWorkout, setSelectedWorkout] = useState<any>(null);
   const [timerState, timerActions] = useWorkoutTimer();
 
-  const handleStartWorkout = () => {
+  const handleStartWorkout = async () => {
     // Transform "Daily Plan" format to "WorkoutDetail" format if needed
     // or just pass it direct if schema matches
     // The weekly plan has: { day, focus, exercises: [] }
     // The Modal expects: { title, exercises: [], ... }
+
+    if (!todaysWorkout?.exercises) return;
 
     const workoutModel = {
       title: todaysWorkout.focus,
@@ -35,6 +39,9 @@ const WorkoutsPage = () => {
       difficulty: userData?.activityLevel || 'Intermediate',
       calories: 300 // Estimate
     };
+
+    // Pre-cache assets for offline resilience
+    await visualAssetService.cacheSessionAssets(workoutModel.exercises);
 
     setSelectedWorkout(workoutModel);
   };

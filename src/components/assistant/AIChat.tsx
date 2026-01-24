@@ -12,23 +12,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import AnonymousUserForm from './AnonymousUserForm';
 import { logError, logEvent } from '@/utils/sentry';
 
-interface Message {
-  id: string;
-  text: string;
-  sender: 'user' | 'assistant';
-  timestamp: Date;
-}
+import { AIMessage } from '@/types/index';
+
 
 // AI API configuration
 import { aiService } from '@/services/aiService';
 
 const AIChat: React.FC = () => {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: '1',
-      text: "Hi there! I'm your AI fitness and nutrition assistant. I can help you with workouts, nutrition advice, and create personalized plans. How can I help you today?",
-      sender: 'assistant',
+      content: "Hi there! I'm your AI fitness and nutrition assistant. I can help you with workouts, nutrition advice, and create personalized plans. How can I help you today?",
+      role: 'assistant',
       timestamp: new Date()
     }
   ]);
@@ -138,10 +134,10 @@ const AIChat: React.FC = () => {
 
     if (!input.trim()) return;
 
-    const userMessage = {
+    const userMessage: AIMessage = {
       id: Date.now().toString(),
-      text: input.trim(),
-      sender: 'user' as const,
+      content: input.trim(),
+      role: 'user',
       timestamp: new Date()
     };
 
@@ -188,8 +184,8 @@ const AIChat: React.FC = () => {
           ...prev,
           {
             id: (Date.now() + 1).toString(),
-            text: aiResponse,
-            sender: 'assistant',
+            content: aiResponse,
+            role: 'assistant',
             timestamp: new Date()
           }
         ]);
@@ -209,8 +205,8 @@ const AIChat: React.FC = () => {
           ...prev,
           {
             id: (Date.now() + 1).toString(),
-            text: "I'm sorry, I'm having trouble processing that request right now. Please try again in a moment, or ask me something else about fitness and nutrition!",
-            sender: 'assistant',
+            content: "I'm sorry, I'm having trouble processing that request right now. Please try again in a moment, or ask me something else about fitness and nutrition!",
+            role: 'assistant',
             timestamp: new Date()
           }
         ]);
@@ -288,18 +284,18 @@ const AIChat: React.FC = () => {
               {messages.map((message) => (
                 <motion.div
                   key={message.id}
-                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
                   <div
-                    className={`${message.sender === 'user'
+                    className={`${message.role === 'user'
                       ? 'bg-gradient-to-r from-purple-600 to-blue-600 text-white'
                       : 'bg-gray-200 text-gray-800'
                       } rounded-lg px-4 py-2 max-w-[80%]`}
                   >
-                    <p className="whitespace-pre-wrap">{message.text}</p>
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                     <p className="text-xs opacity-70 mt-1">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>

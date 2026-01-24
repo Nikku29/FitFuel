@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,13 +7,18 @@ import { UserProvider } from "./contexts/UserContext";
 import Navbar from "./components/navigation/Navbar";
 import Footer from "./components/navigation/Footer";
 import ErrorBoundary from "./components/ErrorBoundary";
+// Group A (Verified Safe)
 import Home from "./pages/Home";
 import Login from "./pages/Auth/Login";
 import Signup from "./pages/Auth/Signup";
 // import Assistant from "./pages/Assistant";
+
+// Group B (Testing)
 import Dashboard from "./pages/Dashboard";
 import Recipes from "./pages/Recipes";
 import Workouts from "./pages/Workouts";
+
+// Group C (Disabled)
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
 import MonitoringDashboard from "./pages/MonitoringDashboard";
@@ -22,6 +26,7 @@ import AIOnboarding from "./pages/AIOnboarding";
 import Subscription from "./pages/Subscription";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
+// Group B (Testing)
 import { setupLazyLoading } from "./utils/imageOptimization";
 import { initSentry } from "./utils/sentry";
 import { AnimatePresence } from "framer-motion";
@@ -37,9 +42,11 @@ import { initializeProductionOptimizations } from "./utils/productionOptimizatio
 const queryClient = new QueryClient();
 
 // Initialize Sentry
+/*
 if (import.meta.env.PROD) {
   initSentry();
 }
+*/
 
 // Animated page wrapper  
 const AnimatedRoutes = () => {
@@ -76,19 +83,25 @@ const App = () => {
   console.log('Build: App component rendering...');
   // Initialize production optimizations
   useEffect(() => {
-    initializeProductionOptimizations();
+    console.log('Build: Effect running');
+    // initializeProductionOptimizations();
   }, []);
 
   // Initialize performance monitoring
   useEffect(() => {
+    console.log('Performance monitoring log');
+    /*
     console.log('Performance monitoring initialized');
 
     return () => {
       performanceMonitor.cleanup();
     };
+    */
   }, []);
 
   return (
+    // <div style={{ padding: 20, fontSize: 24, color: 'green' }}>App Loaded - Providers Disabled</div>
+
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <UserProvider>
@@ -110,6 +123,7 @@ const App = () => {
         </UserProvider>
       </QueryClientProvider>
     </ErrorBoundary>
+
   );
 };
 

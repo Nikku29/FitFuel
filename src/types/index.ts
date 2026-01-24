@@ -38,6 +38,7 @@ export interface Exercise {
   instructions?: string[];
   targetMuscles?: string[];
   equipment?: string[];
+  type?: string;
 }
 
 export interface Workout {

@@ -1,24 +1,22 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useUser } from '@/contexts/UserContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Send, Bot, User as UserIcon, Loader2 } from 'lucide-react';
-import { SYSTEM_PROMPT } from '@/config/aiSystemPrompt';
+import { TRAINER_SYSTEM_PROMPT as SYSTEM_PROMPT } from '@/config/aiSystemPrompt';
 import aiService from '@/services/aiService';
 
-interface Message {
-    role: 'system' | 'user' | 'assistant';
-    content: string;
-}
+import { AIChatMessage } from '@/types/aiTypes';
 
 const AIOnboarding = () => {
     const { userData, user } = useUser();
     const navigate = useNavigate();
-    const [messages, setMessages] = useState<Message[]>([]);
+    const location = useLocation();
+    const [messages, setMessages] = useState<AIChatMessage[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -48,6 +46,10 @@ const AIOnboarding = () => {
     const initializeChat = async () => {
         setIsLoading(true);
 
+        // Check for routed query (from MoE Router)
+        // @ts-ignore
+        const initialQuery = location.state?.initialQuery;
+
         const initialContext = `
     USER PROFILE DATA:
     - Name: ${userData?.name}
@@ -61,23 +63,18 @@ const AIOnboarding = () => {
     - Weight: ${userData?.weight}kg
     
     INSTRUCTION: 
-    Start the consultation. Welcome the user by name. Analyze their profile briefly (1-2 sentences). 
-    Then, ask the MOST important missing question to refine their plan (e.g., about injuries, specific days available, or equipment).
+    ${initialQuery
+                ? `PRIORITY TASK: The user is here because they searched for: "${initialQuery}". skip the standard intro. Analyze their profile in 1 sentence, then Address this specific request properly.`
+                : `Start the consultation. Welcome the user by name. Analyze their profile briefly (1-2 sentences). Then, ask the most important missing question to refine their plan.`
+            }
     `;
 
-        const initialMessages: Message[] = [
+        const initialMessages: AIChatMessage[] = [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: initialContext }
         ];
 
         try {
-            // We manually call the AI service, but we need to expose a method that accepts raw messages
-            // For now, we'll try to use a simplified call or assume aiService handles string arrays.
-            // IMPORTANT: In a real app, we'd update aiService to expose a generic 'chat' method.
-            // For this quick implementation, we will mock the response if the service isn't fully ready for generic chat, 
-            // but ideally we should update 'aiService.ts' to support this.
-            // Let's try to assume we can add a 'chat' method to aiService or use existing.
-
             const response = await aiService.chat(initialMessages);
 
             setMessages([
@@ -95,7 +92,7 @@ const AIOnboarding = () => {
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
 
-        const userMsg: Message = { role: 'user', content: input };
+        const userMsg: AIChatMessage = { role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
         setIsLoading(true);

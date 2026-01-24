@@ -39,7 +39,11 @@ interface FirestoreRecipe {
   ingredients: string[];
   steps: string[];
   source?: 'seeded' | 'ai_generated';
+  chefNote?: string;
 }
+
+import { GatekeeperService } from '@/services/GatekeeperService';
+import { STATIC_RECIPES } from '@/data/recipeData';
 
 const RecipePage = () => {
   const { userData } = useUser();
@@ -58,14 +62,32 @@ const RecipePage = () => {
 
   // Check AI configuration on mount
   useEffect(() => {
+    // GATEKEEPER: Disable AI features for Free Tier
+    if (GatekeeperService.enforceStaticMode(userData)) {
+      setAiConfigured(false);
+      return;
+    }
     const config = aiService.getConfigurationStatus();
     setAiConfigured(config.configured);
-  }, []);
+  }, [userData]);
 
   // ============================================================================
   // FIRESTORE SUBSCRIPTION: Global Recipes Collection
   // ============================================================================
   useEffect(() => {
+    // GATEKEEPER: Serve Static Data for Free Tier
+    if (GatekeeperService.enforceStaticMode(userData)) {
+      console.log("🔒 Gatekeeper: Serving Static Recipes for Free Tier");
+      // Map Static Recipes to Firestore Shape
+      const staticMapped = STATIC_RECIPES.map(r => ({
+        ...r,
+        source: 'seeded' as const
+      }));
+      setFirestoreRecipes(staticMapped as any); // Cast to ignore slight type diffs if any
+      setLoading(false);
+      return;
+    }
+
     const recipesRef = collection(db, 'recipes');
     const q = query(recipesRef, orderBy('title'));
 
@@ -87,12 +109,18 @@ const RecipePage = () => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userData]); // Add userData dependency
 
   // ============================================================================
   // FIRESTORE SUBSCRIPTION: User's AI-Generated Recipes
   // ============================================================================
   useEffect(() => {
+    // GATEKEEPER: Skip user generated recipes for Free Tier
+    if (GatekeeperService.enforceStaticMode(userData)) {
+      setUserGeneratedRecipes([]);
+      return;
+    }
+
     const currentUser = auth.currentUser;
     if (!currentUser) {
       setUserGeneratedRecipes([]);
@@ -502,6 +530,20 @@ const RecipePage = () => {
                 </div>
               </div>
 
+              {/* AGENTIC INSIGHT BLOCK (Chef) */}
+              {/* @ts-ignore */}
+              {selectedRecipe.chefNote && (
+                <div className="mx-8 mt-6 p-4 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 shadow-sm">
+                  <div className="bg-orange-100 p-2 rounded-full h-fit">
+                    <span className="text-xl">👨‍🍳</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-orange-800 text-sm uppercase tracking-wide mb-1">Chef's Insight</h4>
+                    <p className="text-orange-900 text-sm leading-relaxed">{selectedRecipe.chefNote}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="p-8 grid md:grid-cols-2 gap-8">
                 {/* Ingredients Column */}
                 <div>
@@ -563,7 +605,7 @@ const RecipePage = () => {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 

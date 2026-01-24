@@ -22,6 +22,8 @@ export interface UserData {
   medicalConditions?: string;
   activityRestrictions?: string;
   bodyType?: 'Ectomorph' | 'Mesomorph' | 'Endomorph' | string;
+  tier: 'FREE' | 'PRO';
+  credits: number;
 }
 
 export interface UserProfile {
@@ -41,6 +43,8 @@ export interface UserProfile {
   allergies: string | null;
   medical_conditions: string | null;
   activity_restrictions: string | null;
+  tier: 'FREE' | 'PRO';
+  credits: number;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -71,4 +75,6 @@ export const initialUserData: UserData = {
   medicalConditions: '',
   activityRestrictions: '',
   bodyType: '',
+  tier: 'FREE',
+  credits: 0
 };

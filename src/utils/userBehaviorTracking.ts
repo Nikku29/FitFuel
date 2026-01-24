@@ -48,7 +48,7 @@ class UserBehaviorTracker {
     // Track clicks
     document.addEventListener('click', (event) => {
       if (!this.isTracking) return;
-      
+
       const target = event.target as HTMLElement;
       this.trackAction({
         type: 'click',
@@ -66,7 +66,7 @@ class UserBehaviorTracker {
     // Track form submissions
     document.addEventListener('submit', (event) => {
       if (!this.isTracking) return;
-      
+
       const form = event.target as HTMLFormElement;
       this.trackAction({
         type: 'form_submit',
@@ -83,13 +83,13 @@ class UserBehaviorTracker {
     let scrollTimeout: NodeJS.Timeout;
     document.addEventListener('scroll', () => {
       if (!this.isTracking) return;
-      
+
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const scrollPercentage = Math.round(
           (window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)) * 100
         );
-        
+
         this.trackAction({
           type: 'scroll',
           metadata: {
@@ -105,7 +105,7 @@ class UserBehaviorTracker {
     // Track page visibility changes
     document.addEventListener('visibilitychange', () => {
       if (!this.isTracking) return;
-      
+
       this.trackAction({
         type: document.hidden ? 'page_hidden' : 'page_visible',
         metadata: {
@@ -133,7 +133,7 @@ class UserBehaviorTracker {
 
   private getElementSelector(element: HTMLElement): string {
     if (element.id) return `#${element.id}`;
-    if (element.className) return `.${element.className.split(' ')[0]}`;
+    if (element.className && typeof element.className === 'string') return `.${element.className.split(' ')[0]}`;
     return element.tagName.toLowerCase();
   }
 
@@ -156,7 +156,7 @@ class UserBehaviorTracker {
 
   trackPageView(page?: string) {
     const currentPage = page || window.location.pathname;
-    
+
     // Record time on previous page
     if (this.session.pageViews.length > 0) {
       const previousPage = this.session.pageViews[this.session.pageViews.length - 1];
@@ -259,7 +259,7 @@ class UserBehaviorTracker {
   private async sendBatchToServer(actions: UserAction[]) {
     // This would send to your analytics server
     console.log('Sending batch to server:', actions);
-    
+
     // Example implementation:
     // await fetch('/api/analytics', {
     //   method: 'POST',
@@ -284,7 +284,7 @@ class UserBehaviorTracker {
 
     this.session.endTime = Date.now();
     this.trackAction({ type: 'session_end' });
-    
+
     // Send final batch
     const batchedActions = this.getBatchedActions();
     if (batchedActions.length > 0) {

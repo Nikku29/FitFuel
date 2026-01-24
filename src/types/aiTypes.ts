@@ -46,6 +46,7 @@ export interface PersonalizedRecipe {
         fat: number;
         fiber: number;
     };
+    chefNote?: string;
 }
 
 export interface DashboardInsights {
@@ -60,4 +61,9 @@ export interface TrainerContext {
     focus_mode: 'Active_Recovery' | 'Hypertrophy' | 'Strength' | 'Endurance' | 'Mobility' | 'Balanced';
     contraindicated_patterns: string[];
     available_time: number;
+}
+
+export interface AIChatMessage {
+    role: 'system' | 'user' | 'assistant';
+    content: string;
 }

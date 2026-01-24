@@ -52,12 +52,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 // Set local state immediately so UI updates
                 setProfile(newProfile as any);
-                setUserData(prev => ({ ...prev, name: newProfile.full_name }));
+                setUserData(prev => ({
+                  ...prev,
+                  name: newProfile.full_name,
+                  tier: 'FREE',
+                  credits: 0
+                }));
                 return;
               }
               // === SELF-HEALING LOGIC END ===
 
               setProfile(fetchedProfile);
+              setUserData(prev => ({
+                ...prev,
+                tier: fetchedProfile.tier || 'FREE',
+                credits: fetchedProfile.credits || 0
+              }));
             }, setUserData);
           } else {
             setProfile(null);

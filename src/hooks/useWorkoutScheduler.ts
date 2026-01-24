@@ -4,6 +4,9 @@ import { db } from '@/integrations/firebase/config';
 import { aiService } from '@/services/aiService';
 import { UserData } from '@/contexts/UserContextTypes';
 
+import { GatekeeperService } from '@/services/GatekeeperService';
+import { workoutData, gymWorkouts, homeWorkouts } from '@/data/workoutData';
+
 export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
     const [todaysWorkout, setTodaysWorkout] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -21,6 +24,35 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 setLoading(false);
                 return;
             }
+
+            // === GATEKEEPER CHECK ===
+            if (GatekeeperService.enforceStaticMode(userData)) {
+                console.log("🔒 Gatekeeper: Free Tier detected. Serving Static Plan.");
+                setLoading(true);
+                setLoadingMessage("Loading free workout plan...");
+
+                // Construct Static Plan
+                const staticPlan = [
+                    { day: 'Monday', focus: 'Full Body Hit', ...homeWorkouts[0] },
+                    { day: 'Tuesday', focus: 'Cardio Burn', ...workoutData[1] },
+                    { day: 'Wednesday', focus: 'Active Recovery', ...workoutData[11] }, // Recovery
+                    { day: 'Thursday', focus: 'Upper Body Strength', ...gymWorkouts[0] },
+                    { day: 'Friday', focus: 'Lower Body Power', ...workoutData[7] },
+                    { day: 'Saturday', focus: 'Core & Mobility', ...workoutData[6] },
+                    { day: 'Sunday', focus: 'Rest & Yoga', ...workoutData[10] }
+                ];
+
+                setWeekPlan(staticPlan);
+
+                const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+                const todayIndex = getDayIndex();
+                const todayMatch = staticPlan[todayIndex];
+                setTodaysWorkout(todayMatch);
+
+                setLoading(false);
+                return;
+            }
+            // === END GATEKEEPER ===
 
             setLoading(true);
             setLoadingMessage("Syncing with cloud...");
@@ -95,7 +127,7 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
         };
 
         checkAndGeneratePlan();
-    }, [user]);
+    }, [user, userData?.tier]); // Add tier dependency to re-run if tier changes
 
     const regenerateToday = async (adjustmentPrompt: string) => {
         if (!todaysWorkout || !user) return;

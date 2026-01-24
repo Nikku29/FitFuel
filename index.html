@@ -1,51 +1,53 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FitFuel - AI-Powered Fitness Guide</title>
-    <meta name="description" content="FitFuel - Your personalized AI-powered fitness companion for workouts, nutrition, and wellness guidance" />
-    <meta name="author" content="Nikku29" />
-    <meta name="keywords" content="fitness, workout, AI, nutrition, health, exercise, wellness, personal trainer" />
-    <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#9333ea" />
-    
-    <!-- Manifest for PWA -->
-    <link rel="manifest" href="/manifest.json" />
-    
-    <!-- Icons -->
-    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
-    
-    <!-- Preload critical resources -->
-    <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    
-    <!-- Security headers -->
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-Frame-Options" content="DENY" />
-    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
-    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
-    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-    <!-- Open Graph -->
-    <meta property="og:title" content="FitFuel - AI-Powered Fitness Guide" />
-    <meta property="og:description" content="FitFuel - Your personalized AI-powered fitness companion for workouts, nutrition, and wellness guidance" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://nikku29.github.io/FitFuel/og-image.png" />
-    <meta property="og:url" content="https://nikku29.github.io/FitFuel" />
-    <meta property="og:site_name" content="FitFuel" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FitFuel - AI-Powered Fitness Guide</title>
+  <meta name="description"
+    content="FitFuel - Your personalized AI-powered fitness companion for workouts, nutrition, and wellness guidance" />
+  <meta name="author" content="Nikku29" />
+  <meta name="keywords" content="fitness, workout, AI, nutrition, health, exercise, wellness, personal trainer" />
+  <meta name="robots" content="index, follow" />
+  <meta name="theme-color" content="#9333ea" />
 
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="FitFuel - AI-Powered Fitness Guide" />
-    <meta name="twitter:description" content="Your personalized AI-powered fitness companion" />
-    <meta name="twitter:image" content="https://nikku29.github.io/FitFuel/og-image.png" />
+  <!-- Manifest for PWA -->
+  <link rel="manifest" href="/manifest.json" />
 
-    <!-- Structured Data -->
-    <script type="application/ld+json">
+  <!-- Icons -->
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+
+  <!-- Preload critical resources -->
+  <link rel="preload" href="/fonts/inter.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- Security headers -->
+  <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+  <!-- <meta http-equiv="X-Frame-Options" content="DENY" /> -->
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+  <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="FitFuel - AI-Powered Fitness Guide" />
+  <meta property="og:description"
+    content="FitFuel - Your personalized AI-powered fitness companion for workouts, nutrition, and wellness guidance" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://nikku29.github.io/FitFuel/og-image.png" />
+  <meta property="og:url" content="https://nikku29.github.io/FitFuel" />
+  <meta property="og:site_name" content="FitFuel" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="FitFuel - AI-Powered Fitness Guide" />
+  <meta name="twitter:description" content="Your personalized AI-powered fitness companion" />
+  <meta name="twitter:image" content="https://nikku29.github.io/FitFuel/og-image.png" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
@@ -61,10 +63,11 @@
       }
     }
     </script>
-  </head>
+</head>
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

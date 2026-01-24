@@ -132,12 +132,25 @@ const WorkoutDetailModal: React.FC<WorkoutDetailModalProps> = ({
           <div className="p-6">
             <QuoteDisplay workoutType={selectedWorkout.type} className="mb-4" />
 
+            {/* AGENTIC INSIGHT BLOCK */}
+            {selectedWorkout.trainerNote && (
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex gap-3 shadow-sm">
+                <div className="bg-blue-100 p-2 rounded-full h-fit">
+                  <span className="text-xl">🤖</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-blue-800 text-sm uppercase tracking-wide mb-1">Coach's Insight</h4>
+                  <p className="text-blue-900 text-sm leading-relaxed">{selectedWorkout.trainerNote}</p>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-center mb-8">
               <MotionButton
                 onClick={() => setShowActiveSession(true)}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="bg-gradient-to-r from-fitfuel-purple to-pink-600 text-white px-8 py-6 rounded-full text-lg font-bold shadow-lg hover:shadow-xl flex items-center gap-2"
+                className="bg-gradient-to-r from-fitfuel-purple to-pink-600 text-purple px-8 py-6 rounded-full text-lg font-bold shadow-lg hover:shadow-xl flex items-center gap-2"
               >
                 <Play className="fill-current" /> START GUIDED SESSION
               </MotionButton>
