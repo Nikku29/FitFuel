@@ -1,3 +1,4 @@
+import React from 'react';
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
@@ -22,11 +23,37 @@ window.onerror = function (message, source, lineno, colno, error) {
 
 console.log('Build: Starting app mount...');
 try {
-    const root = document.getElementById("root");
-    console.log('Build: Root element found:', !!root);
-    if (!root) throw new Error("Root element missing");
+    const rootElement = document.getElementById("root");
+    console.log('Build: Root element found:', !!rootElement);
+    if (!rootElement) throw new Error("Root element missing");
 
-    createRoot(root).render(<App />);
+    const root = createRoot(rootElement);
+    console.log('Build: createRoot successful');
+    
+    // Add a basic inline error boundary just for catching the white screen
+    class RootErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+        state = { hasError: false, error: null as Error | null };
+        static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+        componentDidCatch(error: Error) { console.error("Root Mount Error:", error); }
+        render() {
+            if (this.state.hasError) {
+                return (
+                    <div style={{ padding: '20px', background: '#fee2e2', color: '#991b1b', fontFamily: 'monospace', zIndex: 9999, position: 'relative' }}>
+                        <h2>React Mount Failed (White Screen)</h2>
+                        <pre>{this.state.error?.message || String(this.state.error)}</pre>
+                        <pre style={{fontSize: '10px'}}>{this.state.error?.stack}</pre>
+                    </div>
+                );
+            }
+            return this.props.children;
+        }
+    }
+
+    root.render(
+        <RootErrorBoundary>
+            <App />
+        </RootErrorBoundary>
+    );
     console.log('Build: App mounted successfully');
     // createRoot(root).render(<div style={{ padding: 20, fontSize: 24, color: 'blue' }}>Sanity Check: Main.tsx Running</div>);
     // console.log('Build: Sanity Check mounted');
