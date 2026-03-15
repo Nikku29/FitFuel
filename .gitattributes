@@ -1,0 +1,10 @@
+# Auto-generated UI components
+src/components/ui/** linguist-vendored
+
+# Integration libraries and generated types
+src/integrations/** linguist-vendored
+src/hooks/** linguist-vendored
+src/lib/** linguist-vendored
+
+# Explicitly ensure Analytics Engine is counted
+analytics-engine/** linguist-language=Python
