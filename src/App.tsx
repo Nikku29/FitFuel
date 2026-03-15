@@ -30,7 +30,6 @@ import { useEffect } from "react";
 // Group B (Testing)
 import { setupLazyLoading } from "./utils/imageOptimization";
 import { initSentry } from "./utils/sentry";
-import { AnimatePresence } from "framer-motion";
 import PageTransition from "./components/PageTransition";
 import { performanceMonitor } from "./utils/performance";
 import { userBehaviorTracker } from "./utils/userBehaviorTracking";
@@ -59,25 +58,21 @@ const AnimatedRoutes = () => {
   }, [location.pathname]);
 
   return (
-    <AnimatePresence mode="wait">
-      {/* @ts-ignore - Routes key is required for AnimatePresence to work correctly */}
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<PageTransition><Home /></PageTransition>} />
-        <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
-        <Route path="/signup" element={<PageTransition><Signup /></PageTransition>} />
-        {/* Assistant Route Removed for Open Source UX Pivot */}
-        <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
-        <Route path="/recipes" element={<PageTransition><Recipes /></PageTransition>} />
-        <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />
-        <Route path="/community" element={<PageTransition><Community /></PageTransition>} />
-        <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
-        <Route path="/pricing" element={<PageTransition><PricingPage /></PageTransition>} />
-        <Route path="/subscription" element={<PageTransition><Subscription /></PageTransition>} />
-        <Route path="/monitoring" element={<PageTransition><MonitoringDashboard /></PageTransition>} />
-        <Route path="/ai-onboarding" element={<PageTransition><AIOnboarding /></PageTransition>} />
-        <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
-      </Routes>
-    </AnimatePresence>
+    <Routes location={location}>
+      <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+      <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+      <Route path="/signup" element={<PageTransition><Signup /></PageTransition>} />
+      <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
+      <Route path="/recipes" element={<PageTransition><Recipes /></PageTransition>} />
+      <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />
+      <Route path="/community" element={<PageTransition><Community /></PageTransition>} />
+      <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
+      <Route path="/pricing" element={<PageTransition><PricingPage /></PageTransition>} />
+      <Route path="/subscription" element={<PageTransition><Subscription /></PageTransition>} />
+      <Route path="/monitoring" element={<PageTransition><MonitoringDashboard /></PageTransition>} />
+      <Route path="/ai-onboarding" element={<PageTransition><AIOnboarding /></PageTransition>} />
+      <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+    </Routes>
   );
 };
 
