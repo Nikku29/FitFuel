@@ -1,0 +1,6 @@
+name = "fitfuel-crawler"
+main = "index.js"
+compatibility_date = "2024-03-14"
+
+# FitFuel Web Scraper config
+# Deploys to Cloudflare Edge network

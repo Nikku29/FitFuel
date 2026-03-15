@@ -35,6 +35,7 @@ const Navbar = () => {
     { name: 'Recipes', path: '/recipes' },
     { name: 'Workouts', path: '/workouts' },
     { name: 'Community', path: '/community' },
+    { name: 'Pricing', path: '/pricing' },
   ];
 
   const userInitials = userData.name

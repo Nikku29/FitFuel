@@ -19,14 +19,14 @@ const getEnv = (key: string, fallback: string): string => {
 
 // Firebase configuration using environment variables
 export const firebaseConfig = {
-  apiKey: getEnv("VITE_FIREBASE_API_KEY", "AIzaSyB5xGQjDtANHWOrILBHL8lVE00wVwEqcJU"),
-  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN", "fitfuel-9a387.firebaseapp.com"),
-  projectId: getEnv("VITE_FIREBASE_PROJECT_ID", "fitfuel-9a387"),
-  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET", "fitfuel-9a387.firebasestorage.app"),
-  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID", "355503155035"),
-  appId: getEnv("VITE_FIREBASE_APP_ID", "1:355503155035:web:3e11256ba6d9fd09465c7e"),
-  measurementId: getEnv("VITE_FIREBASE_MEASUREMENT_ID", "G-5011FW4RL7"),
-  databaseURL: getEnv("VITE_FIREBASE_DATABASE_URL", "https://fitfuel-9a387-default-rtdb.asia-southeast1.firebasedatabase.app")
+  apiKey: getEnv("VITE_FIREBASE_API_KEY", ""),
+  authDomain: getEnv("VITE_FIREBASE_AUTH_DOMAIN", ""),
+  projectId: getEnv("VITE_FIREBASE_PROJECT_ID", ""),
+  storageBucket: getEnv("VITE_FIREBASE_STORAGE_BUCKET", ""),
+  messagingSenderId: getEnv("VITE_FIREBASE_MESSAGING_SENDER_ID", ""),
+  appId: getEnv("VITE_FIREBASE_APP_ID", ""),
+  measurementId: getEnv("VITE_FIREBASE_MEASUREMENT_ID", ""),
+  databaseURL: getEnv("VITE_FIREBASE_DATABASE_URL", "")
 };
 
 // Initialize Firebase

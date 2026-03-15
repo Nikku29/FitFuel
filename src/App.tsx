@@ -21,6 +21,7 @@ import Workouts from "./pages/Workouts";
 // Group C (Disabled)
 import Community from "./pages/Community";
 import Profile from "./pages/Profile";
+import PricingPage from "./pages/Pricing";
 import MonitoringDashboard from "./pages/MonitoringDashboard";
 import AIOnboarding from "./pages/AIOnboarding";
 import Subscription from "./pages/Subscription";
@@ -70,6 +71,7 @@ const AnimatedRoutes = () => {
         <Route path="/workouts" element={<PageTransition><Workouts /></PageTransition>} />
         <Route path="/community" element={<PageTransition><Community /></PageTransition>} />
         <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
+        <Route path="/pricing" element={<PageTransition><PricingPage /></PageTransition>} />
         <Route path="/subscription" element={<PageTransition><Subscription /></PageTransition>} />
         <Route path="/monitoring" element={<PageTransition><MonitoringDashboard /></PageTransition>} />
         <Route path="/ai-onboarding" element={<PageTransition><AIOnboarding /></PageTransition>} />

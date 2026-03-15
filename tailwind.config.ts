@@ -110,6 +110,54 @@ export default {
 						DEFAULT: '#4f46e5', // Vibrant indigo
 						dark: '#3730a3',   // Deep indigo
 					}
+				},
+				// Alias fitfusion as fitfuel to fix bugs where `fitfuel-*` was used
+				fitfuel: {
+					purple: {
+						light: '#c084fc', 
+						DEFAULT: '#9333ea',
+						dark: '#7c2d12', 
+					},
+					blue: {
+						light: '#60a5fa',
+						DEFAULT: '#2563eb',
+						dark: '#1d4ed8', 
+					},
+					green: {
+						light: '#4ade80',
+						DEFAULT: '#16a34a',
+						dark: '#15803d', 
+					},
+					orange: {
+						light: '#fb923c',
+						DEFAULT: '#ea580c',
+						dark: '#c2410c', 
+					},
+					red: {
+						light: '#f87171',
+						DEFAULT: '#dc2626',
+						dark: '#b91c1c', 
+					},
+					yellow: {
+						light: '#fbbf24',
+						DEFAULT: '#d97706',
+						dark: '#b45309', 
+					},
+					pink: {
+						light: '#f472b6',
+						DEFAULT: '#db2777',
+						dark: '#be185d', 
+					},
+					teal: {
+						light: '#2dd4bf',
+						DEFAULT: '#0d9488',
+						dark: '#0f766e', 
+					},
+					indigo: {
+						light: '#818cf8',
+						DEFAULT: '#4f46e5',
+						dark: '#3730a3', 
+					}
 				}
 			},
 			borderRadius: {

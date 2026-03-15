@@ -14,7 +14,7 @@ import FoodCamera from '@/components/calories/FoodCamera';
 import { Camera } from 'lucide-react';
 import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
 import { FoodPrediction } from '@/services/vision/nutritionScanner';
-import { saveAiRecipe } from '@/integrations/firebase/firestore';
+import { saveAiRecipe, logNutrition } from '@/integrations/firebase/firestore';
 import { validateRecipe, Recipe } from '@/utils/dietaryValidator';
 
 // Firebase Imports
@@ -40,13 +40,15 @@ interface FirestoreRecipe {
   steps: string[];
   source?: 'seeded' | 'ai_generated';
   chefNote?: string;
+  servingSize?: string;
+  nutritionFacts?: { protein?: number; carbs?: number; fat?: number; fiber?: number };
 }
 
 import { GatekeeperService } from '@/services/GatekeeperService';
 import { STATIC_RECIPES } from '@/data/recipeData';
 
 const RecipePage = () => {
-  const { userData } = useUser();
+  const { userData, user } = useUser();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRecipe, setSelectedRecipe] = useState<FirestoreRecipe | null>(null);
   const [currentTab, setCurrentTab] = useState('All');
@@ -240,56 +242,135 @@ const RecipePage = () => {
 
           {/* Natural Language Search - AI Enabled */}
           {aiConfigured ? (
-            <div className="mb-6">
-              <NaturalLanguageInput
-                type="recipe"
-                placeholder="✨ Describe your ideal meal (e.g., 'High protein breakfast under 400 calories')"
-                isLoading={loadingAi}
-                onSearch={async (query) => {
-                  setLoadingAi(true);
-                  try {
-                    const mode = userData?.dietaryPreference ? 'strict_profile' : 'guest';
-                    const results = await aiService.generateFromNaturalLanguage(
-                      userData,
-                      query,
-                      'recipe',
-                      mode
-                    ) as PersonalizedRecipe[];
+            <div className="mb-6 space-y-4">
+              {/* Main AI Recipe Generator */}
+              <div>
+                <NaturalLanguageInput
+                  type="recipe"
+                  placeholder="✨ Describe your ideal meal (e.g., 'High protein breakfast under 400 calories')"
+                  isLoading={loadingAi}
+                  onSearch={async (query) => {
+                    setLoadingAi(true);
+                    try {
+                      const currentUser = auth.currentUser;
+                      const mode = userData?.dietaryPreference ? 'strict_profile' : 'guest';
+                      const results = await aiService.generateFromNaturalLanguage(
+                        userData,
+                        query,
+                        'recipe',
+                        mode,
+                        currentUser?.uid
+                      ) as PersonalizedRecipe[];
 
-                    // Save to Firestore for authenticated users
-                    const currentUser = auth.currentUser;
-                    if (currentUser) {
-                      for (const recipe of results) {
-                        await saveAiRecipe(currentUser.uid, recipe);
+                      // Save to Firestore for authenticated users
+                      if (currentUser) {
+                        for (const recipe of results) {
+                          await saveAiRecipe(currentUser.uid, recipe);
+                        }
+                        toast({
+                          title: 'Recipe Generated & Saved!',
+                          description: `Created ${results.length} personalized recipe(s) and saved to your collection.`,
+                        });
+                      } else {
+                        toast({
+                          title: 'Recipe Generated!',
+                          description: `Created ${results.length} personalized recipe(s). Log in to save.`,
+                        });
                       }
+                    } catch (error) {
+                      console.error('Recipe generation failed:', error);
                       toast({
-                        title: 'Recipe Generated & Saved!',
-                        description: `Created ${results.length} personalized recipe(s) and saved to your collection.`,
+                        title: 'Generation Failed',
+                        description: 'Could not generate recipe. Try again.',
+                        variant: 'destructive'
                       });
-                    } else {
-                      toast({
-                        title: 'Recipe Generated!',
-                        description: `Created ${results.length} personalized recipe(s). Log in to save.`,
-                      });
+                    } finally {
+                      setLoadingAi(false);
                     }
-                  } catch (error) {
-                    console.error('Recipe generation failed:', error);
+                  }}
+                  onFoodScan={(prediction: FoodPrediction) => {
                     toast({
-                      title: 'Generation Failed',
-                      description: 'Could not generate recipe. Try again.',
-                      variant: 'destructive'
+                      title: 'Food Detected!',
+                      description: `${prediction.food_name || prediction.className} - Est. ${prediction.calories} kcal`,
                     });
-                  } finally {
-                    setLoadingAi(false);
-                  }
-                }}
-                onFoodScan={(prediction: FoodPrediction) => {
-                  toast({
-                    title: 'Food Detected!',
-                    description: `${prediction.className} - Est. ${prediction.estimatedCalories} kcal`,
-                  });
-                }}
-              />
+                  }}
+                />
+              </div>
+
+              {/* On-Demand Meal Creation Box */}
+              <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-6 border-2 border-orange-200 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                  <Sparkles className="w-5 h-5 mr-2 text-orange-600" />
+                  Create Custom Meal
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Need a specific meal? Describe what you want and AI will create it instantly with full nutritional info.
+                </p>
+                <NaturalLanguageInput
+                  type="recipe"
+                  placeholder="e.g., 'High-protein vegetarian lunch under 500 calories' or 'Quick keto-friendly dinner'"
+                  isLoading={loadingAi}
+                  onSearch={async (query) => {
+                    setLoadingAi(true);
+                    try {
+                      const currentUser = auth.currentUser;
+                      const mode = userData?.dietaryPreference ? 'strict_profile' : 'guest';
+                      const results = await aiService.generateFromNaturalLanguage(
+                        userData,
+                        query,
+                        'recipe',
+                        mode,
+                        currentUser?.uid
+                      ) as PersonalizedRecipe[];
+
+                      if (results && results.length > 0) {
+                        const customRecipe = results[0];
+                        
+                        // Save to Firestore for authenticated users
+                        if (currentUser) {
+                          await saveAiRecipe(currentUser.uid, customRecipe);
+                          toast({
+                            title: 'Custom Meal Created & Saved!',
+                            description: `Generated "${customRecipe.title}" with ${customRecipe.calories} calories.`,
+                          });
+                        } else {
+                          toast({
+                            title: 'Custom Meal Created!',
+                            description: `Generated "${customRecipe.title}". Log in to save to your collection.`,
+                          });
+                        }
+                        
+                        // Show the recipe in modal
+                        setSelectedRecipe({
+                          id: `custom-${Date.now()}`,
+                          title: customRecipe.title,
+                          description: customRecipe.description || '',
+                          prepTime: customRecipe.prepTime,
+                          calories: customRecipe.calories,
+                          category: customRecipe.category,
+                          dietaryType: customRecipe.dietaryType,
+                          tags: customRecipe.tags || [],
+                          ingredients: customRecipe.ingredients || [],
+                          steps: customRecipe.steps || [],
+                          source: 'ai_generated',
+                          chefNote: (customRecipe as any).agentic_insight,
+                          servingSize: (customRecipe as any).servingSize,
+                          nutritionFacts: (customRecipe as any).nutritionFacts
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Custom meal generation failed:', error);
+                      toast({
+                        title: 'Generation Failed',
+                        description: 'Could not generate custom meal. Please try again.',
+                        variant: 'destructive'
+                      });
+                    } finally {
+                      setLoadingAi(false);
+                    }
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <Alert>
@@ -307,6 +388,19 @@ const RecipePage = () => {
               <Link to="/profile" className="ml-2 underline">Update Profile</Link>
             </div>
           )}
+
+          {/* AI Vision Educational Banner */}
+          <div className="bg-blue-50 text-blue-700 p-4 rounded-xl mb-4 text-sm font-medium border border-blue-200 flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <div className="bg-blue-100 p-2 rounded-full mt-0.5 shrink-0">
+              <Camera className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-base mb-1">New Feature: AI Food Vision</h4>
+              <p className="text-blue-600/90 leading-relaxed">
+                Did you know? You can tap the camera icon (bottom right) to snap or upload a photo of whatever you're eating. Our AI will automatically identify the meal, estimate the calories, and let you log it directly to your dashboard!
+              </p>
+            </div>
+          </div>
 
           {/* Guest Tab Filters */}
           {isGuest && (
@@ -521,6 +615,11 @@ const RecipePage = () => {
                     <span className="mr-2 text-xl">🍽️</span>
                     <span className="capitalize">{selectedRecipe.dietaryType}</span>
                   </div>
+                  {selectedRecipe.servingSize && (
+                    <div className="flex items-center bg-white/20 backdrop-blur-md px-4 py-2 rounded-lg">
+                      <span className="text-sm">Per {selectedRecipe.servingSize}</span>
+                    </div>
+                  )}
                   {selectedRecipe.source === 'ai_generated' && (
                     <div className="flex items-center bg-white/20 backdrop-blur-md px-4 py-2 rounded-lg">
                       <Sparkles className="h-5 w-5 mr-2 text-yellow-300" />
@@ -528,6 +627,36 @@ const RecipePage = () => {
                     </div>
                   )}
                 </div>
+                {user && (
+                  <div className="mt-4">
+                    <Button
+                      variant="secondary"
+                      className="bg-white/20 hover:bg-white/30 text-white border border-white/40"
+                      onClick={async () => {
+                        try {
+                          await logNutrition({
+                            userId: user.uid,
+                            foodName: selectedRecipe.title,
+                            calories: selectedRecipe.calories || 0,
+                            macros: {
+                              protein: selectedRecipe.nutritionFacts?.protein ?? 0,
+                              carbs: selectedRecipe.nutritionFacts?.carbs ?? 0,
+                              fat: selectedRecipe.nutritionFacts?.fat ?? 0,
+                              fiber: selectedRecipe.nutritionFacts?.fiber
+                            },
+                            date: new Date(),
+                            mealType: selectedRecipe.category || 'lunch'
+                          });
+                          toast({ title: 'Meal logged', description: `Added ${selectedRecipe.calories} kcal to your dashboard.` });
+                        } catch (e) {
+                          toast({ title: 'Error', description: 'Could not log meal.', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      Log this meal (add to dashboard)
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {/* AGENTIC INSIGHT BLOCK (Chef) */}
@@ -565,19 +694,25 @@ const RecipePage = () => {
                   </Card>
 
                   <div className="mt-6">
-                    <h4 className="font-semibold text-gray-700 mb-2">Nutritional Breakdown (est.)</h4>
-                    <div className="grid grid-cols-3 gap-2 text-center">
+                    <h4 className="font-semibold text-gray-700 mb-2">
+                      {selectedRecipe.servingSize ? `Nutrition per ${selectedRecipe.servingSize}` : 'Nutritional breakdown (est.)'}
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                       <div className="bg-orange-50 p-2 rounded-lg border border-orange-100">
                         <div className="text-sm text-gray-500">Protein</div>
-                        <div className="font-bold text-orange-700">High</div>
+                        <div className="font-bold text-orange-700">{selectedRecipe.nutritionFacts?.protein != null ? `${selectedRecipe.nutritionFacts.protein}g` : '—'}</div>
                       </div>
                       <div className="bg-green-50 p-2 rounded-lg border border-green-100">
                         <div className="text-sm text-gray-500">Carbs</div>
-                        <div className="font-bold text-green-700">Moderate</div>
+                        <div className="font-bold text-green-700">{selectedRecipe.nutritionFacts?.carbs != null ? `${selectedRecipe.nutritionFacts.carbs}g` : '—'}</div>
                       </div>
                       <div className="bg-blue-50 p-2 rounded-lg border border-blue-100">
-                        <div className="text-sm text-gray-500">Fats</div>
-                        <div className="font-bold text-blue-700">Low</div>
+                        <div className="text-sm text-gray-500">Fat</div>
+                        <div className="font-bold text-blue-700">{selectedRecipe.nutritionFacts?.fat != null ? `${selectedRecipe.nutritionFacts.fat}g` : '—'}</div>
+                      </div>
+                      <div className="bg-purple-50 p-2 rounded-lg border border-purple-100">
+                        <div className="text-sm text-gray-500">Fiber</div>
+                        <div className="font-bold text-purple-700">{selectedRecipe.nutritionFacts?.fiber != null ? `${selectedRecipe.nutritionFacts.fiber}g` : '—'}</div>
                       </div>
                     </div>
                   </div>

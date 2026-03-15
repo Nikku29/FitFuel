@@ -25,6 +25,7 @@ interface WorkoutStep {
     name: string;
     description?: string;
     nextName?: string;
+    audioCue?: string;
     reps?: string;
     sets?: number;
     equipment?: string[];
@@ -46,6 +47,7 @@ import { db } from '@/integrations/firebase/config';
 import { doc, setDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { useUser } from '@/contexts/UserContext';
 import { SafetySanitizer } from '@/services/SafetySanitizer';
+import { logWorkout } from '@/integrations/firebase/firestore';
 
 export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
     workout,
@@ -67,65 +69,80 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
 
     // Generate steps from workout data
     const steps = useMemo(() => {
-        const s: WorkoutStep[] = [];
-
-        safeWorkout.exercises.forEach((ex: any, index: number) => {
-            const sets = parseInt(ex.sets) || 1;
-            const rest = ex.rest_seconds || ex.restTime || 45; // Enhanced rest logic
-            const duration = ex.duration ? parseDuration(ex.duration) : 0;
-
-            for (let i = 0; i < sets; i++) {
-
-                // 1. PREP STEP (5s fixed strictness)
-                s.push({
-                    type: 'prep',
-                    duration: 5,
-                    name: `Get Ready: ${ex.name}`,
-                    description: i === 0 ? "First set. Let's go." : `Set ${i + 1} of ${sets}`,
-                    exercise: ex,
-                    reps: ex.reps,
-                    equipment: ex.equipment
-                });
-
-                // 2. WORK STEP
-                s.push({
-                    type: 'work',
-                    exercise: ex,
-                    duration: duration,
-                    name: ex.name,
-                    reps: ex.reps,
-                    sets: i + 1,
-                    description: ex.description,
-                    nextName: i < sets - 1 ? 'Rest' : (safeWorkout.exercises[index + 1]?.name || 'Finished'),
-                    equipment: ex.equipment
-                });
-
-                // 3. REST STEP (unless it's the very last thing)
-                if (i < sets - 1 || index < safeWorkout.exercises.length - 1) {
-                    const nextExName = i < sets - 1 ? ex.name : (safeWorkout.exercises[index + 1]?.name || 'Finished');
-                    const nextEq = i < sets - 1 ? ex.equipment : (safeWorkout.exercises[index + 1]?.equipment);
-
-                    s.push({
-                        type: 'rest',
-                        duration: rest,
-                        name: 'Rest',
-                        description: `Recover. Next: ${nextExName}`,
-                        nextName: nextExName,
-                        exercise: i < sets - 1 ? ex : safeWorkout.exercises[index + 1],
-                        equipment: nextEq
-                    });
-                }
+        try {
+            if (!safeWorkout || !safeWorkout.exercises || safeWorkout.exercises.length === 0) {
+                throw new Error("Invalid Workout Data");
             }
-        });
 
-        s.push({
-            type: 'finished',
-            duration: 0,
-            name: 'Workout Complete',
-            description: 'greatjob'
-        });
+            const s: WorkoutStep[] = [];
 
-        return s;
+            safeWorkout.exercises.forEach((ex: any, index: number) => {
+                const sets = parseInt(ex.sets) || 1;
+                const rest = ex.rest_seconds || ex.restTime || 45; // Enhanced rest logic
+                const duration = ex.duration ? parseDuration(ex.duration) : 0;
+
+                for (let i = 0; i < sets; i++) {
+
+                    // 1. PREP STEP (3s fixed strictness)
+                    s.push({
+                        type: 'prep',
+                        duration: 3,
+                        name: `Get Ready: ${ex.name}`,
+                        description: i === 0 ? "First set. Let's go." : `Set ${i + 1} of ${sets}`,
+                        exercise: ex,
+                        audioCue: ex.audio_cue, // Pass the AI coaching tip
+                        reps: ex.reps,
+                        equipment: ex.equipment
+                    });
+
+                    // 2. WORK STEP
+                    s.push({
+                        type: 'work',
+                        exercise: ex,
+                        duration: duration,
+                        name: ex.name,
+                        reps: ex.reps,
+                        sets: i + 1,
+                        description: ex.description,
+                        nextName: i < sets - 1 ? 'Rest' : (safeWorkout.exercises[index + 1]?.name || 'Finished'),
+                        equipment: ex.equipment
+                    });
+
+                    // 3. REST STEP (unless it's the very last thing)
+                    if (i < sets - 1 || index < safeWorkout.exercises.length - 1) {
+                        const nextExName = i < sets - 1 ? ex.name : (safeWorkout.exercises[index + 1]?.name || 'Finished');
+                        const nextEq = i < sets - 1 ? ex.equipment : (safeWorkout.exercises[index + 1]?.equipment);
+
+                        s.push({
+                            type: 'rest',
+                            duration: rest,
+                            name: 'Rest',
+                            description: `Recover. Next: ${nextExName}`,
+                            nextName: nextExName,
+                            exercise: i < sets - 1 ? ex : safeWorkout.exercises[index + 1],
+                            equipment: nextEq
+                        });
+                    }
+                }
+            });
+
+            s.push({
+                type: 'finished',
+                duration: 0,
+                name: 'Workout Complete',
+                description: 'greatjob'
+            });
+
+            return s;
+        } catch (err) {
+            console.error("Workout Steps Integration Error:", err);
+            return [{
+                type: 'finished',
+                duration: 0,
+                name: 'Session Error',
+                description: 'Workout data was invalid. Please regenerate the plan.'
+            } as WorkoutStep];
+        }
     }, [safeWorkout]);
 
     const currentStep = steps[currentStepIndex];
@@ -182,17 +199,15 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
     const finishWorkout = useCallback(async () => {
         protocols.announceComplete();
 
-        // DASHBOARD LOOP: Write-back to Firestore
         if (user) {
             try {
-                const today = new Date().toISOString().split('T')[0];
                 const totalBurn = safeWorkout.exercises.reduce((acc: number, ex: any) => {
-                    // Simple MET placeholder: 5 kcal/min for now
-                    const duration = ex.duration ? parseDuration(ex.duration) : 60; // Assume 1 min per set if rep based
+                    const duration = ex.duration ? parseDuration(ex.duration) : 60;
                     const sets = parseInt(ex.sets) || 1;
                     return acc + (5 * (duration / 60) * sets);
                 }, 0);
 
+                const today = new Date().toISOString().split('T')[0];
                 const logRef = doc(db, 'users', user.uid, 'daily_logs', today);
                 await setDoc(logRef, {
                     calories_burned: increment(totalBurn),
@@ -200,14 +215,36 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
                     last_updated: serverTimestamp()
                 }, { merge: true });
 
-                console.log(`[Dashboard] Synced stats. Burned ${totalBurn} kcal.`);
+                const totalDurationMinutes = Math.round(
+                    steps
+                        .filter((s) => s.type === 'work' || s.type === 'rest')
+                        .reduce((acc, s) => acc + (s.duration || 0), 0) / 60
+                );
+
+                const { error } = await logWorkout({
+                    userId: user.uid,
+                    workoutId: `session-${Date.now()}`,
+                    workoutTitle: (workout as any).title || 'Guided Session',
+                    duration: totalDurationMinutes || 1,
+                    caloriesBurned: Math.round(totalBurn),
+                    exercises: safeWorkout.exercises.map((ex: any) => ({
+                        name: ex.name,
+                        sets: parseInt(ex.sets) || 1,
+                        reps: ex.reps,
+                        duration: ex.duration ? parseDuration(ex.duration) : undefined
+                    })),
+                    date: new Date()
+                });
+                if (error) console.warn("logWorkout error:", error);
+
+                console.log(`[Dashboard] Synced stats. Burned ${totalBurn} kcal, logged to workout_logs.`);
             } catch (e) {
                 console.error("Failed to sync dashboard stats", e);
             }
         }
 
         setTimeout(onComplete, 2000);
-    }, [onComplete, protocols, user, safeWorkout]);
+    }, [onComplete, protocols, user, safeWorkout, workout, steps]);
 
 
     // ===========================================
@@ -232,6 +269,11 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
             );
         } else if (currentStep.type === 'prep') {
             protocols.announcePrep(currentStep.duration);
+
+            // SPEAK THE AI SCRIPT
+            if (currentStep.audioCue) {
+                setTimeout(() => speak(currentStep.audioCue!), 1500); // 1.5s delay to let Prep announce first
+            }
         } else if (currentStep.type === 'work') {
             protocols.startWork();
         }
@@ -343,14 +385,36 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
                             />
                         </div>
 
+                        {/* AI COACHING SCRIPT */}
+                        {currentStep.audioCue && (
+                            <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-center font-medium mb-6 w-full animate-in fade-in slide-in-from-bottom-2">
+                                💡 Coach: "{currentStep.audioCue}"
+                            </div>
+                        )}
+
+                        {/* POSE DESCRIPTION (form & technique) – always show when we have an exercise */}
+                        {currentStep.exercise?.description && (currentStep.type === 'work' || currentStep.type === 'prep') && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 w-full text-left">
+                                <h4 className="text-sm font-bold text-amber-800 uppercase tracking-wide mb-2">Form & technique</h4>
+                                <p className="text-amber-900 font-medium">{currentStep.exercise.description}</p>
+                            </div>
+                        )}
+
                         {/* TEXT INFO */}
                         <h2 className={`text-3xl md:text-5xl font-black mb-2 text-center text-gray-900 leading-tight ${currentStep.type === 'prep' ? 'animate-pulse text-purple-600' : ''}`}>
                             {currentStep.name}
                         </h2>
 
-                        <p className="text-xl text-gray-500 mb-6 font-medium text-center">
-                            {currentStep.description}
-                        </p>
+                        {!(currentStep.type === 'work' && currentStep.exercise?.description) && (
+                            <p className="text-xl text-gray-500 mb-6 font-medium text-center">
+                                {currentStep.description}
+                            </p>
+                        )}
+                        {currentStep.type === 'work' && currentStep.exercise?.description && (
+                            <p className="text-lg text-gray-500 mb-2 font-medium text-center">
+                                Set {currentStep.sets ?? 1} of {currentStep.exercise?.sets ?? 1}
+                            </p>
+                        )}
 
                         {/* REPS BADGE */}
                         {currentStep.reps && (

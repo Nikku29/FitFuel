@@ -147,6 +147,22 @@ MOTIVATIONAL APPROACH:
 - Build confidence while encouraging progress
 - Be specific rather than generic in messaging`;
 
+export const SCANNER_VOLUMETRIC_PROMPT = `Analyze this food image. Estimate the portion size and volumetric dimensions.
+Output ONLY the estimated volume/weight description in a concise format.
+Example: "1 large bowl, approx 350g" or "2 slices, approx 80g".`;
+
+export const SCANNER_CULINARY_PROMPT = `Identify this dish. List the exact dish name, cuisine style, main ingredients, and cooking method.
+Be specific (e.g., 'Chicken Tikka Masala' vs 'Curry', 'Grilled' vs 'Fried').
+Output format: "Dish: [Name], Ingredients: [List of main ingredients], Method: [Cooking method]"`;
+
+export const SCANNER_NUTRITION_PROMPT = `Based on the Food Identity and Portion Size provided, calculate the Macros.
+Return ONLY valid JSON:
+{ 
+  "estimatedCalories": number, 
+  "macros": { "protein": number, "carbs": number, "fat": number }, 
+  "confidence": number (0-1) 
+}`;
+
 export const GENERAL_ASSISTANT_PROMPT = `You are FitFuel AI, a knowledgeable and supportive fitness and nutrition assistant. You have expertise in:
 
 - Exercise science and training methodologies

@@ -441,6 +441,32 @@ export const logNutrition = async (log: Omit<NutritionLog, 'id' | 'created_at'>)
   }
 };
 
+export const getNutritionLogs = async (userId: string, options?: { since?: Date; limit?: number }) => {
+  try {
+    const q = query(collection(db, 'nutrition_logs'), where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    let logs = snapshot.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        date: (data.date as any)?.toDate?.() ?? data.date,
+        created_at: (data.created_at as any)?.toDate?.()
+      } as NutritionLog & { id: string };
+    });
+    if (options?.since) {
+      const since = options.since.getTime();
+      logs = logs.filter(l => new Date(l.date).getTime() >= since);
+    }
+    logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const limited = options?.limit ? logs.slice(0, options.limit) : logs;
+    return { logs: limited, error: null };
+  } catch (e) {
+    console.error('Error fetching nutrition logs:', e);
+    return { logs: [], error: e };
+  }
+};
+
 /**
  * Save AI-generated recipe to user's collection
  */

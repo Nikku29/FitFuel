@@ -7,7 +7,8 @@ import { aiService } from '@/services/aiService';
 import { DashboardInsights } from '@/types/aiTypes';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getUserWorkoutLogs, WorkoutLog } from '@/integrations/firebase/firestore';
+import { getUserWorkoutLogs, getNutritionLogs, WorkoutLog } from '@/integrations/firebase/firestore';
+import { getDailyCalorieTarget } from '@/utils/dailyCalorieTarget';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { startOfWeek, endOfWeek, isWithinInterval, subDays, isSameDay, format, parseISO } from 'date-fns';
 import {
@@ -23,10 +24,14 @@ import {
   Award,
   Dumbbell,
   Apple,
-  Sparkles
+  Sparkles,
+  Download,
+  PlusCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import FoodCamera from '@/components/calories/FoodCamera';
 import CalorieAnalysisResult from '@/components/calories/CalorieAnalysisResult';
 import { useToast } from '@/hooks/use-toast';
@@ -37,14 +42,16 @@ const Dashboard = () => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [aiConfigured, setAiConfigured] = useState(false);
 
-  // Real Data State
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [nutritionLogs, setNutritionLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [stats, setStats] = useState({
     workoutsThisWeek: 0,
     caloriesBurned: 0,
     activeMinutes: 0,
-    streak: 0
+    streak: 0,
+    caloriesConsumedToday: 0,
+    dailyCalorieTarget: 2000
   });
 
   // AI Scanner State
@@ -52,80 +59,69 @@ const Dashboard = () => {
   const [scannedImage, setScannedImage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Custom manual entry state
+  const [isManualEntryOpen, setIsManualEntryOpen] = useState(false);
+  const [manualEntryData, setManualEntryData] = useState({ name: '', calories: '', protein: '' });
+
   const { toast } = useToast();
 
-  // Load Real Data
-  useEffect(() => {
-    const fetchRealData = async () => {
-      if (!user) return;
-      setLoadingLogs(true);
+  const fetchRealData = async () => {
+    if (!user) return;
+    setLoadingLogs(true);
 
-      const { logs } = await getUserWorkoutLogs(user.uid);
-      setWorkoutLogs(logs);
+    const { logs } = await getUserWorkoutLogs(user.uid);
+    setWorkoutLogs(logs);
 
-      // Calculate Stats
-      const now = new Date();
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+    const { logs: nutrLogs } = await getNutritionLogs(user.uid, { limit: 200 });
+    setNutritionLogs(nutrLogs);
 
-      const thisWeekLogs = logs.filter(log => isWithinInterval(log.date, { start: weekStart, end: weekEnd }));
+    const now = new Date();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+    const todayStr = format(now, 'yyyy-MM-dd');
 
-      const calories = logs.reduce((acc, log) => acc + (log.caloriesBurned || 0), 0);
-      const minutes = logs.reduce((acc, log) => acc + (log.duration || 0), 0);
+    const thisWeekLogs = logs.filter(log => isWithinInterval(log.date, { start: weekStart, end: weekEnd }));
+    const caloriesBurned = logs.reduce((acc, log) => acc + (log.caloriesBurned || 0), 0);
+    const activeMinutes = logs.reduce((acc, log) => acc + (log.duration || 0), 0);
+    const caloriesConsumedToday = nutrLogs
+      .filter(n => format(new Date(n.date), 'yyyy-MM-dd') === todayStr)
+      .reduce((acc, n) => acc + (n.calories || 0), 0);
 
-      // Calculate Streak
-      let currentStreak = 0;
-      const sortedLogs = [...logs].sort((a, b) => b.date.getTime() - a.date.getTime());
+    const { target: dailyCalorieTarget } = getDailyCalorieTarget(userData);
 
-      if (sortedLogs.length > 0) {
-        let checkDate = now;
-        // Check if did workout today
-        if (isSameDay(sortedLogs[0].date, checkDate)) {
-          currentStreak++;
-          checkDate = subDays(checkDate, 1);
-        } else if (isSameDay(sortedLogs[0].date, subDays(checkDate, 1))) {
-          // Or yesterday (streak valid if missed today but did yesterday? standard logic usually requires today or yesterday to keep alive)
-          checkDate = subDays(checkDate, 1);
-        }
-
-        // Simple iteration for previous days
-        // Note: exact consecutive day logic can be complex with multiple logs per day.
-        // Simplified: Unique days with workouts.
-        const uniqueDays = Array.from(new Set(logs.map(l => format(l.date, 'yyyy-MM-dd')))).sort().reverse();
-        if (uniqueDays.length > 0) {
-          const todayStr = format(now, 'yyyy-MM-dd');
-          const yesterdayStr = format(subDays(now, 1), 'yyyy-MM-dd');
-
-          // If most recent is today or yesterday, streak is alive
-          if (uniqueDays[0] === todayStr || uniqueDays[0] === yesterdayStr) {
-            currentStreak = 1;
-            let prevDate = parseISO(uniqueDays[0]);
-
-            for (let i = 1; i < uniqueDays.length; i++) {
-              const currDate = parseISO(uniqueDays[i]);
-              if (isSameDay(currDate, subDays(prevDate, 1))) {
-                currentStreak++;
-                prevDate = currDate;
-              } else {
-                break;
-              }
-            }
-          }
+    let currentStreak = 0;
+    const sortedLogs = [...logs].sort((a, b) => b.date.getTime() - a.date.getTime());
+    const uniqueDays = Array.from(new Set(logs.map(l => format(l.date, 'yyyy-MM-dd')))).sort().reverse();
+    if (uniqueDays.length > 0) {
+      const yesterdayStr = format(subDays(now, 1), 'yyyy-MM-dd');
+      if (uniqueDays[0] === todayStr || uniqueDays[0] === yesterdayStr) {
+        currentStreak = 1;
+        let prevDate = parseISO(uniqueDays[0]);
+        for (let i = 1; i < uniqueDays.length; i++) {
+          const currDate = parseISO(uniqueDays[i]);
+          if (isSameDay(currDate, subDays(prevDate, 1))) {
+            currentStreak++;
+            prevDate = currDate;
+          } else break;
         }
       }
+    }
 
-      setStats({
-        workoutsThisWeek: thisWeekLogs.length,
-        caloriesBurned: calories,
-        activeMinutes: minutes,
-        streak: currentStreak
-      });
+    setStats({
+      workoutsThisWeek: thisWeekLogs.length,
+      caloriesBurned,
+      activeMinutes,
+      streak: currentStreak,
+      caloriesConsumedToday,
+      dailyCalorieTarget
+    });
+    setLoadingLogs(false);
+  };
 
-      setLoadingLogs(false);
-    };
-
+  useEffect(() => {
     fetchRealData();
-  }, [user]);
+  }, [user, userData]);
 
 
   // Check AI configuration and generate insights
@@ -234,16 +230,14 @@ const Dashboard = () => {
 
       toast({
         title: "Meal Logged",
-        description: `added ${analysisResult.calories} kcal to your daily total.`,
+        description: `Added ${analysisResult.calories} kcal to your daily total.`,
       });
 
-      // Update local stats visually (optional, real update happens on refresh/listener)
       setStats(prev => ({
         ...prev,
-        caloriesBurned: prev.caloriesBurned // This is burned, not consumed. In full app we'd track consumed separately.
-        // For now just logging it to DB is the goal.
+        caloriesConsumedToday: prev.caloriesConsumedToday + (analysisResult.calories || 0)
       }));
-
+      await fetchRealData();
     } catch (e) {
       console.error("Failed to log meal", e);
       toast({ title: "Error", description: "Could not save meal.", variant: "destructive" });
@@ -251,6 +245,63 @@ const Dashboard = () => {
 
     setIsScannerOpen(false);
     handleResetScan();
+  };
+
+  const handleManualLog = async () => {
+    if (!user || !manualEntryData.name || !manualEntryData.calories) {
+      toast({ title: "Error", description: "Name and calories are required.", variant: "destructive" });
+      return;
+    }
+    try {
+      await import('@/integrations/firebase/firestore').then(({ logNutrition }) =>
+        logNutrition({
+          userId: user.uid,
+          foodName: manualEntryData.name,
+          calories: parseInt(manualEntryData.calories, 10),
+          macros: {
+            protein: parseInt(manualEntryData.protein || '0', 10),
+            carbs: 0,
+            fat: 0
+          },
+          date: new Date(),
+          mealType: 'snack'
+        })
+      );
+      toast({ title: "Meal Logged", description: `Added ${manualEntryData.calories} kcal.` });
+      setStats(prev => ({
+        ...prev,
+        caloriesConsumedToday: prev.caloriesConsumedToday + parseInt(manualEntryData.calories, 10)
+      }));
+      setManualEntryData({ name: '', calories: '', protein: '' });
+      setIsManualEntryOpen(false);
+      await fetchRealData();
+    } catch (e) {
+      toast({ title: "Error", description: "Could not save meal.", variant: "destructive" });
+    }
+  };
+
+  const handleDownloadReport = () => {
+    const reportContent = `
+FitFuel Weekly Report for ${userData.name}
+----------------------------------------
+Workouts This Week: ${stats.workoutsThisWeek}
+Total Active Minutes: ${stats.activeMinutes} min
+Total Calories Burned: ${stats.caloriesBurned} kcal
+Current Streak: ${stats.streak} days
+Calories Consumed Today: ${stats.caloriesConsumedToday} kcal / Target: ${stats.dailyCalorieTarget} kcal
+    `.trim();
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `FitFuel_Report_${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({ title: 'Report Downloaded!', description: 'Your weekly progress report has been saved.' });
   };
 
   const getPersonalizedRecommendation = () => {
@@ -279,16 +330,54 @@ const Dashboard = () => {
     { label: "Streak Days", value: stats.streak, icon: Trophy, color: "bg-fitfusion-blue" },
   ];
 
+  const consumedPct = stats.dailyCalorieTarget > 0
+    ? Math.min(100, Math.round((stats.caloriesConsumedToday / stats.dailyCalorieTarget) * 100))
+    : 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-fitfusion-purple/5 via-white to-fitfusion-blue/5 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-fitfusion-purple to-fitfusion-blue bg-clip-text text-transparent">
-            Welcome back, {userData.name || 'Athlete'}!
-          </h1>
-          <p className="text-gray-600">Dynamic Dashboard • Live Data</p>
+        <div className="flex flex-col md:flex-row justify-between items-center text-center md:text-left space-y-4 md:space-y-0">
+          <div className="space-y-2">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-fitfusion-purple to-fitfusion-blue bg-clip-text text-transparent">
+              Welcome back, {userData.name || 'Athlete'}!
+            </h1>
+            <p className="text-gray-600">Dynamic Dashboard • Live Data</p>
+          </div>
+          <Button onClick={handleDownloadReport} className="bg-white text-fitfusion-purple border-2 border-fitfusion-purple hover:bg-purple-50">
+            <Download className="w-4 h-4 mr-2" />
+            Download Report
+          </Button>
         </div>
+
+        {/* Calories consumed vs daily target */}
+        <Card className="p-4 border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center">
+                <Apple className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-900">Calories today</p>
+                <p className="text-2xl font-bold text-amber-900">
+                  {loadingLogs ? <Skeleton className="h-8 w-16 inline-block" /> : `${stats.caloriesConsumedToday} / ${stats.dailyCalorieTarget} kcal`}
+                </p>
+              </div>
+            </div>
+            <div className="flex-1 min-w-[120px] max-w-[200px]">
+              <div className="h-3 bg-amber-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-500 rounded-full transition-all duration-500"
+                  style={{ width: `${consumedPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-amber-700 mt-1">
+                {consumedPct < 100 ? `${100 - consumedPct}% to go` : 'Target reached'}
+              </p>
+            </div>
+          </div>
+        </Card>
 
         {/* Quick Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -462,6 +551,43 @@ const Dashboard = () => {
               ) : (
                 <FoodCamera onCapture={handleCapture} onClose={() => setIsScannerOpen(false)} />
               )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isManualEntryOpen} onOpenChange={setIsManualEntryOpen}>
+            <DialogTrigger asChild>
+              <Card className="hover:shadow-lg transition-all duration-300 cursor-pointer group border-2 border-blue-200 hover:border-blue-500">
+                <CardContent className="p-6 text-center">
+                  <div className="bg-blue-500 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform shadow-lg">
+                    <PlusCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <h3 className="font-semibold text-blue-900">Manual Entry</h3>
+                  <p className="text-sm text-gray-600">Log custom meal</p>
+                </CardContent>
+              </Card>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Log Custom Entry</DialogTitle>
+                <DialogDescription>Manually enter your consumed calories and protein.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="entry-name">Meal Name</Label>
+                  <Input id="entry-name" placeholder="e.g. Protein Shake" value={manualEntryData.name} onChange={e => setManualEntryData({ ...manualEntryData, name: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="entry-calories">Calories (kcal)</Label>
+                  <Input id="entry-calories" type="number" placeholder="e.g. 250" value={manualEntryData.calories} onChange={e => setManualEntryData({ ...manualEntryData, calories: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="entry-protein">Protein (g) (Optional)</Label>
+                  <Input id="entry-protein" type="number" placeholder="e.g. 25" value={manualEntryData.protein} onChange={e => setManualEntryData({ ...manualEntryData, protein: e.target.value })} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={handleManualLog} className="w-full bg-blue-600 hover:bg-blue-700 text-white">Save Entry</Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 

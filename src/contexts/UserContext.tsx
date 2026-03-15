@@ -6,6 +6,7 @@ import { UserData, UserProfile, UserContextProps, initialUserData } from './User
 import { fetchProfile } from './UserContextHooks';
 // Import createProfile to fix missing accounts
 import { createProfile } from '@/integrations/firebase/firestore';
+import { CreditService } from '@/services/CreditService';
 
 const UserContext = createContext<UserContextProps | undefined>(undefined);
 
@@ -50,23 +51,44 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Create it in Firestore immediately
                 await createProfile(currentUser.uid, newProfile);
 
+                // Initialize credits for new user
+                try {
+                  await CreditService.initializeCredits(currentUser.uid, 'FREE');
+                } catch (creditError) {
+                  console.warn('Could not initialize credits:', creditError);
+                }
+
                 // Set local state immediately so UI updates
                 setProfile(newProfile as any);
                 setUserData(prev => ({
                   ...prev,
                   name: newProfile.full_name,
                   tier: 'FREE',
-                  credits: 0
+                  credits: 3 // FREE tier gets 3 credits
                 }));
                 return;
               }
               // === SELF-HEALING LOGIC END ===
 
               setProfile(fetchedProfile);
+              
+              // Initialize credits if not set (for existing users)
+              const tier = fetchedProfile.tier || 'FREE';
+              let credits = fetchedProfile.credits;
+              if (credits === undefined || credits === null) {
+                try {
+                  await CreditService.initializeCredits(currentUser.uid, tier);
+                  credits = tier === 'PRO' ? -1 : 3;
+                } catch (creditError) {
+                  console.warn('Could not initialize credits:', creditError);
+                  credits = tier === 'PRO' ? -1 : 0;
+                }
+              }
+              
               setUserData(prev => ({
                 ...prev,
-                tier: fetchedProfile.tier || 'FREE',
-                credits: fetchedProfile.credits || 0
+                tier,
+                credits: credits || 0
               }));
             }, setUserData);
           } else {

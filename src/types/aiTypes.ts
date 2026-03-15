@@ -47,6 +47,7 @@ export interface PersonalizedRecipe {
         fiber: number;
     };
     chefNote?: string;
+    servingSize?: string;
 }
 
 export interface DashboardInsights {

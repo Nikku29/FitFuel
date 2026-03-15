@@ -3,12 +3,17 @@ import { motion } from 'framer-motion';
 import { visualAssetService } from '@/services/VisualAssetService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProceduralPose } from '@/components/visuals/ProceduralPose';
+import { ExerciseSlideShow } from '@/components/visuals/ExerciseSlideShow';
+
+type PoseType = 'horizontal_prone' | 'standing_squat' | 'standing_press' | 'seated_row' | 'vertical_hang' | 'seated_twist' | 'supine_leg_lift' | 'side_plank' | 'cobra';
 
 interface InstructionalSpriteProps {
     exerciseName: string;
     category?: string;
     phase: 'rest' | 'prep' | 'work';
 }
+
+const VALID_POSES: PoseType[] = ['horizontal_prone', 'standing_squat', 'standing_press', 'seated_row', 'vertical_hang', 'seated_twist', 'supine_leg_lift', 'side_plank', 'cobra'];
 
 export const InstructionalSprite: React.FC<InstructionalSpriteProps> = ({
     exerciseName,
@@ -40,40 +45,51 @@ export const InstructionalSprite: React.FC<InstructionalSpriteProps> = ({
 
     // PROCEDURAL ENGINE RENDERING
     if (asset.source === 'generated' && asset.id.startsWith('procedural')) {
-        const poseName = asset.id.replace('procedural-', '');
+        const poseName = asset.id.replace('procedural-', '') as PoseType;
+        const pose = VALID_POSES.includes(poseName) ? poseName : 'standing_squat';
+        const isIsometric = category === 'isometric' || exerciseName.toLowerCase().includes('plank') || exerciseName.toLowerCase().includes('hold');
 
-        if (phase === 'work') return null; // Hide in work phase
-
-        if (phase === 'prep') {
+        // WORK phase: slide-style animation (start -> mid -> end cycle)
+        if (phase === 'work') {
             return (
-                <div className="h-64 w-full flex items-center justify-center bg-gray-50 rounded-xl border-4 border-yellow-400">
-                    <div className="w-32 h-32 animate-pulse">
-                        <ProceduralPose pose={poseName} frame="start" color="#eab308" />
-                    </div>
+                <div className="w-full flex flex-col items-center justify-center py-4">
+                    <ExerciseSlideShow pose={pose} isIsometric={isIsometric} color="#7c3aed" className="w-full" />
                 </div>
             );
         }
 
-        // Rest Phase: Comic Strip
+        // PREP Phase or ISOMETRIC REST Phase -> Single Large Pulse
+        if (phase === 'prep' || (phase === 'rest' && isIsometric)) {
+            return (
+                <div className={`h-64 w-full flex items-center justify-center bg-gray-50 rounded-xl border-4 ${phase === 'prep' ? 'border-yellow-400' : 'border-blue-200'}`}>
+                    <div className="w-48 h-48 animate-pulse">
+                        <ProceduralPose pose={pose} frame={isIsometric ? "mid" : "start"} color={phase === 'prep' ? "#eab308" : "#3b82f6"} />
+                    </div>
+                    {isIsometric && <div className="absolute mt-40 font-mono text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded">STATIC HOLD</div>}
+                </div>
+            );
+        }
+
+        // DYNAMIC REST Phase: Comic Strip (Start -> Mid -> End)
         return (
             <div className="flex items-center justify-center gap-4 w-full h-48">
                 <div className="flex flex-col items-center">
                     <div className="w-24 h-24 border rounded-lg bg-white p-2">
-                        <ProceduralPose pose={poseName} frame="start" />
+                        <ProceduralPose pose={pose} frame="start" />
                     </div>
                     <span className="text-xs font-mono mt-1">START</span>
                 </div>
                 <span className="text-gray-300">→</span>
                 <div className="flex flex-col items-center">
                     <div className="w-24 h-24 border rounded-lg bg-white p-2">
-                        <ProceduralPose pose={poseName} frame="mid" />
+                        <ProceduralPose pose={pose} frame="mid" />
                     </div>
                     <span className="text-xs font-mono mt-1">ACTION</span>
                 </div>
                 <span className="text-gray-300">→</span>
                 <div className="flex flex-col items-center">
                     <div className="w-24 h-24 border rounded-lg bg-white p-2">
-                        <ProceduralPose pose={poseName} frame="end" />
+                        <ProceduralPose pose={pose} frame="end" />
                     </div>
                     <span className="text-xs font-mono mt-1">END</span>
                 </div>

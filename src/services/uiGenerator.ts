@@ -66,7 +66,8 @@ export class UIGenerator {
             steps: rawRecipe.steps || [],
             nutritionFacts: rawRecipe.nutritionFacts || { protein: 0, carbs: 0, fat: 0, fiber: 0 },
             tags: rawRecipe.tags || ["AI Chef"],
-            chefNote: rawRecipe.agentic_insight // The 'Liaison Agent' insight
+            chefNote: rawRecipe.agentic_insight,
+            servingSize: rawRecipe.servingSize
         };
     }
 }

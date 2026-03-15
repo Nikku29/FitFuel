@@ -6,14 +6,16 @@ import { useWorkoutScheduler } from '@/hooks/useWorkoutScheduler';
 import QuoteLoader from '@/components/ui/QuoteLoader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Calendar, RefreshCw, Dumbbell, Play, Clock, Flame } from 'lucide-react';
+import { Calendar, Dumbbell, Play, Clock, Flame, Sparkles } from 'lucide-react';
 import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
 import { toast } from "@/hooks/use-toast";
 import WorkoutDetailModal from '@/components/workouts/WorkoutDetailModal';
 import { useWorkoutTimer } from '@/components/workouts/WorkoutTimerLogic';
 import { exerciseInstructions } from '@/data/workoutData';
-
+import { aiService } from '@/services/aiService';
+import { PersonalizedWorkout } from '@/types/aiTypes';
 import { visualAssetService } from '@/services/VisualAssetService';
+import { ManualWorkoutBuilder } from '@/components/workouts/ManualWorkoutBuilder';
 
 const WorkoutsPage = () => {
   const { user, userData } = useUser();
@@ -137,15 +139,49 @@ const WorkoutsPage = () => {
               </CardFooter>
             </Card>
 
-            {/* THE AUDIBLE BAR (Adjustment) */}
-            <div className="mt-8 bg-white/50 backdrop-blur-md rounded-xl p-6 border border-white shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-500 mb-3 flex items-center">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Need to call an audible?
+            {/* SINGLE NLP BOX: Audible adjustment OR custom workout */}
+            <div className="mt-8 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border-2 border-purple-200 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+                <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
+                Adjust or create a workout
               </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Describe what you want: swap today’s plan (e.g. “I’m sore, give me a recovery session”) or create a custom workout (e.g. “30-min HIIT” or “upper body with dumbbells”).
+              </p>
               <NaturalLanguageInput
-                placeholder="I'm sore, give me a recovery session instead..."
-                onSearch={(query) => regenerateToday(query)}
+                placeholder="e.g. 'I'm sore, recovery session' or '30-min full body HIIT' or 'Upper body with dumbbells'"
+                onSearch={async (query) => {
+                  const isAdjustment = /sore|tired|swap|replace|instead|recovery|easy|light|skip today|adjust|change today/i.test(query);
+                  try {
+                    if (isAdjustment && todaysWorkout) {
+                      await regenerateToday(query);
+                      return;
+                    }
+                    const results = await aiService.generateFromNaturalLanguage(
+                      userData,
+                      query,
+                      'workout',
+                      userData ? 'strict_profile' : 'guest',
+                      user?.uid
+                    ) as PersonalizedWorkout[];
+                    if (results?.length > 0) {
+                      const customWorkout = results[0];
+                      const workoutModel = {
+                        title: customWorkout.title,
+                        exercises: customWorkout.exercises,
+                        duration: customWorkout.duration,
+                        difficulty: customWorkout.difficulty,
+                        calories: customWorkout.calories || 300
+                      };
+                      await visualAssetService.cacheSessionAssets(workoutModel.exercises);
+                      setSelectedWorkout(workoutModel);
+                      toast({ title: 'Custom Workout Created!', description: `Generated "${customWorkout.title}" with ${customWorkout.exercises.length} exercises.` });
+                    }
+                  } catch (e) {
+                    console.error('Workout generation failed:', e);
+                    toast({ title: 'Generation Failed', description: 'Could not generate workout. Try again.', variant: 'destructive' });
+                  }
+                }}
                 type="workout"
               />
             </div>
@@ -154,13 +190,14 @@ const WorkoutsPage = () => {
         ) : (
           <div className="text-center py-12">
             <p className="text-gray-500">No workout scheduled for today. Enjoy your rest!</p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => regenerateToday("Generate a full body workout")}
-            >
-              Generate Manual Session
-            </Button>
+            <div className="flex justify-center mt-4">
+              <ManualWorkoutBuilder onSaveData={(workout) => {
+                visualAssetService.cacheSessionAssets(workout.exercises).then(() => {
+                  setSelectedWorkout(workout);
+                  toast({ title: 'Custom Workout Started!', description: `Loaded "${workout.title}" with ${workout.exercises.length} exercises.` });
+                });
+              }} />
+            </div>
           </div>
         )}
       </div>

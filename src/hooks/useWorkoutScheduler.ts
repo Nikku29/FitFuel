@@ -86,7 +86,7 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 if (!validPlan) {
                     setLoadingMessage("Building your complete weekly routine...");
 
-                    const newWeekPlan = await aiService.generateWeeklyPlan(userData);
+                    const newWeekPlan = await aiService.generateWeeklyPlan(userData, user.uid);
 
                     const hasGeneratedContent = newWeekPlan.some((d: any) => d.exercises && d.exercises.length > 0);
 
@@ -140,7 +140,8 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 userData,
                 `Adjust this workout: "${todaysWorkout.focus}". Request: ${adjustmentPrompt}. Return valid workout JSON.`,
                 'workout',
-                'strict_profile'
+                'strict_profile',
+                user.uid
             );
 
             const safeSession = Array.isArray(newSession) ? newSession[0] : newSession;

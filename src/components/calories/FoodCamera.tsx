@@ -1,100 +1,69 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { X, Camera, Barcode, Loader2, Sparkles } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Camera, Barcode, Loader2, Sparkles, X, Edit2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Progress } from '@/components/ui/progress';
-
-// Types for dynamically loaded libraries
-type MobileNetType = { load: () => Promise<any> };
-type TfType = { ready: () => Promise<void> };
+import { nutritionScanner, FoodPrediction } from '@/services/vision/nutritionScanner';
 
 interface FoodCameraProps {
-    onCapture: (data: { type: 'barcode' | 'vision', value: string, confidence?: number }) => void;
+    onCapture: (data: { type: 'barcode' | 'vision', value: string, confidence?: number, foodData?: FoodPrediction }) => void;
     onClose: () => void;
 }
 
 const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
     const [mode, setMode] = useState<'barcode' | 'vision'>('vision');
-    const [model, setModel] = useState<any>(null);
-    const [isModelLoading, setIsModelLoading] = useState(true);
-    const [predictions, setPredictions] = useState<{ className: string; probability: number }[]>([]);
-    const [loadProgress, setLoadProgress] = useState(0);
+    const [isScanning, setIsScanning] = useState(false);
+    const [lastPrediction, setLastPrediction] = useState<FoodPrediction | null>(null);
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
+    const [editableFoodName, setEditableFoodName] = useState('');
+    const [editablePortion, setEditablePortion] = useState('');
+    const [isRecalculating, setIsRecalculating] = useState(false);
 
     const videoRef = useRef<HTMLVideoElement>(null);
-    const scannerRef = useRef<any>(null); // Type 'any' for lazy-loaded scanner
+    const scannerRef = useRef<any>(null);
 
-    // 1. Lazy Load TensorFlow MobileNet Model
+    // 1. Camera Initialization (Common)
     useEffect(() => {
-        const loadModel = async () => {
-            try {
-                console.log("Lazy Loading TensorFlow...");
-                setIsModelLoading(true);
-                setLoadProgress(10);
+        let stream: MediaStream | null = null;
 
-                const tf = await import('@tensorflow/tfjs') as unknown as TfType;
-                setLoadProgress(40);
-                await tf.ready();
-                setLoadProgress(60);
-
-                const mobilenet = await import('@tensorflow-models/mobilenet') as unknown as MobileNetType;
-                setLoadProgress(80);
-
-                const loadedModel = await mobilenet.load();
-                setLoadProgress(100);
-
-                setModel(loadedModel);
-                setIsModelLoading(false);
-                console.log("MobileNet Loaded!");
-            } catch (err) {
-                console.error("Failed to load TensorFlow model", err);
-                setIsModelLoading(false);
-            }
-        };
-
-        if (mode === 'vision' && !model) loadModel();
-        else if (mode === 'vision' && model) setIsModelLoading(false);
-
-    }, [mode, model]);
-
-    // 2. Vision Mode: Real-time Classification Loop
-    useEffect(() => {
-        let animationId: number;
-        let isActive = true;
-
-        const classifyFrame = async () => {
-            if (!isActive) return;
-            if (model && videoRef.current && videoRef.current.readyState === 4) {
+        const startCamera = async () => {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
                 try {
-                    const preds = await model.classify(videoRef.current);
-                    if (isActive) setPredictions(preds.slice(0, 2)); // Top 2
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' }
+                    });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        videoRef.current.onloadedmetadata = () => {
+                            videoRef.current?.play().catch(e => console.error("Play error:", e));
+                        };
+                    }
                 } catch (e) {
-                    // ignore transient frame errors
+                    console.error("Camera access denied:", e);
                 }
             }
-            animationId = requestAnimationFrame(classifyFrame);
         };
 
-        if (mode === 'vision' && !isModelLoading && model) {
+        if (mode === 'vision') {
             startCamera();
-            classifyFrame();
         }
 
         return () => {
-            isActive = false;
-            cancelAnimationFrame(animationId);
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
         };
-    }, [mode, model, isModelLoading]);
+    }, [mode]);
 
-    // 3. Barcode Mode: HTML5-QRCode (Lazy Loaded)
+    // 2. Barcode Mode: HTML5-QRCode (Lazy Loaded)
     useEffect(() => {
         let isMounted = true;
 
         if (mode === 'barcode') {
             const initScanner = async () => {
-                // Dynamic Import
                 const { Html5QrcodeScanner } = await import('html5-qrcode');
-
                 if (!isMounted) return;
 
                 if (!scannerRef.current) {
@@ -105,7 +74,7 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
                     );
 
                     scanner.render((decodedText) => {
-                        if (navigator.vibrate) navigator.vibrate(50); // HAPTIC FEEDBACK
+                        if (navigator.vibrate) navigator.vibrate(50);
                         scanner.clear();
                         onCapture({ type: 'barcode', value: decodedText });
                     }, (err) => {
@@ -114,8 +83,6 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
                     scannerRef.current = scanner;
                 }
             };
-
-            // Small delay to ensure DOM is ready
             setTimeout(initScanner, 100);
         }
 
@@ -128,38 +95,75 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
         };
     }, [mode, onCapture]);
 
-    const startCamera = async () => {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' }
-                });
-                if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    videoRef.current.onloadedmetadata = () => {
-                        videoRef.current?.play().catch(e => console.error("Play error:", e));
-                    };
-                }
-            } catch (e) {
-                console.error("Camera access denied:", e);
+    // 3. Vision Capture Handler
+    const handleVisionCapture = async () => {
+        if (!videoRef.current || isScanning) return;
+
+        setIsScanning(true);
+        if (navigator.vibrate) navigator.vibrate(50);
+
+        try {
+            // Call the Multi-Model Pipeline
+            const prediction = await nutritionScanner.scanFromCamera(videoRef.current);
+
+            if (prediction) {
+                setLastPrediction(prediction);
+                setEditableFoodName(prediction.food_name);
+                setEditablePortion(prediction.portion_detected);
+                setShowVerificationModal(true);
+            } else {
+                console.warn("No food detected.");
             }
+        } catch (error) {
+            console.error("Vision Scan Failed", error);
+        } finally {
+            setIsScanning(false);
         }
     };
 
-    const stopCamera = () => {
-        if (videoRef.current && videoRef.current.srcObject) {
-            const stream = videoRef.current.srcObject as MediaStream;
-            stream.getTracks().forEach(t => t.stop());
+    // Handle user edits and recalculation
+    const handleEditAndRecalculate = async () => {
+        if (!lastPrediction) return;
+
+        setIsRecalculating(true);
+        try {
+            // Recalculate macros based on edited food name and portion
+            const result = await nutritionScanner.recalculateMacros(
+                editableFoodName,
+                editablePortion
+            );
+
+            if (result) {
+                const updatedPrediction: FoodPrediction = {
+                    ...lastPrediction,
+                    food_name: editableFoodName,
+                    portion_detected: editablePortion,
+                    calories: result.calories,
+                    macros: result.macros,
+                    className: editableFoodName,
+                    probability: lastPrediction.confidence_score,
+                };
+
+                setLastPrediction(updatedPrediction);
+            }
+        } catch (error) {
+            console.error("Recalculation failed:", error);
+        } finally {
+            setIsRecalculating(false);
         }
     };
 
-    useEffect(() => {
-        return () => stopCamera();
-    }, []);
-
-    const handleVisionCapture = () => {
-        if (predictions.length > 0) {
-            onCapture({ type: 'vision', value: predictions[0].className, confidence: predictions[0].probability });
+    // Confirm and send the prediction
+    const handleConfirm = () => {
+        if (lastPrediction) {
+            onCapture({
+                type: 'vision',
+                value: lastPrediction.food_name,
+                confidence: lastPrediction.confidence_score,
+                foodData: lastPrediction
+            });
+            setShowVerificationModal(false);
+            onClose();
         }
     };
 
@@ -190,37 +194,29 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
                         />
 
                         {/* Laser Scan Animation (Themed Purple) */}
-                        {!isModelLoading && (
+                        {!isScanning && (
                             <div className="absolute inset-0 pointer-events-none">
                                 <div className="w-full h-0.5 bg-purple-500/80 shadow-[0_0_15px_rgba(168,85,247,0.8)] absolute top-0 animate-scan-laser"></div>
                                 <div className="absolute inset-0 bg-gradient-to-b from-purple-500/10 to-transparent opacity-30 animate-scan-pulse"></div>
                             </div>
                         )}
 
-                        {/* Predictions Overlay */}
-                        {predictions.length > 0 && (
-                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 pt-12 space-y-3">
-                                {predictions.map((p, i) => (
-                                    <div key={i} className={cn(
-                                        "flex justify-between items-center text-white px-4 py-3 rounded-xl backdrop-blur-md transition-all duration-300",
-                                        i === 0 ? "bg-white/20 border border-white/30 shadow-lg scale-105" : "bg-black/40 border border-white/10"
-                                    )}>
-                                        <span className="font-semibold capitalize text-lg tracking-wide">{p.className}</span>
-                                        <span className={cn("font-bold", p.probability > 0.8 ? "text-green-400" : "text-yellow-400")}>
-                                            {Math.round(p.probability * 100)}%
-                                        </span>
-                                    </div>
-                                ))}
+                        {/* Scanning Overlay */}
+                        {isScanning && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm z-10 p-8">
+                                <Loader2 className="w-12 h-12 text-purple-500 animate-spin mb-4" />
+                                <div className="text-white font-bold text-lg mb-2">Analyzing...</div>
+                                <div className="text-purple-300 text-sm animate-pulse">Running 3-Stage Pipeline</div>
                             </div>
                         )}
 
-                        {/* Loading State */}
-                        {isModelLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-10 p-8">
-                                <Loader2 className="w-12 h-12 text-purple-500 animate-spin mb-4" />
-                                <div className="text-white font-semibold mb-2">Initializing Neural Net</div>
-                                <Progress value={loadProgress} className="w-full h-2 bg-gray-800" indicatorClassName="bg-purple-500" />
-                                <p className="text-xs text-gray-500 mt-2">Downloading MobileNet (~4MB)</p>
+                        {/* Result Overlay (Transient) */}
+                        {lastPrediction && !isScanning && (
+                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 pt-12">
+                                <div className="bg-white/20 border border-white/30 shadow-lg backdrop-blur-md rounded-xl p-4 text-white">
+                                    <div className="font-bold text-lg">{lastPrediction.food_name || lastPrediction.className}</div>
+                                    <div className="text-sm opacity-80">{lastPrediction.calories} kcal • {lastPrediction.macros.p}g Protein</div>
+                                </div>
                             </div>
                         )}
                     </>
@@ -244,8 +240,9 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
 
                 <button
                     onClick={mode === 'vision' ? handleVisionCapture : () => { }}
+                    disabled={isScanning}
                     className={cn(
-                        "h-24 w-24 rounded-full border-4 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center relative group",
+                        "h-24 w-24 rounded-full border-4 shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center relative group disabled:opacity-50 disabled:cursor-not-allowed",
                         mode === 'vision' ? "border-purple-500" : "border-white"
                     )}
                 >
@@ -267,8 +264,120 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
             </div>
 
             <div className="mt-6 text-white/50 text-sm max-w-xs text-center font-medium bg-black/40 px-4 py-2 rounded-full backdrop-blur-sm border border-white/5">
-                {mode === 'vision' ? "Point at food for Instant AI Analysis" : "Align barcode within the frame"}
+                {mode === 'vision' ? "Tap trigger to scan with AI" : "Align barcode within the frame"}
             </div>
+
+            {/* Verification Modal */}
+            <Dialog open={showVerificationModal} onOpenChange={setShowVerificationModal}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Sparkles className="w-5 h-5 text-purple-500" />
+                            Verify Food Details
+                        </DialogTitle>
+                        <DialogDescription>
+                            Review and edit the detected food information. Changes will trigger automatic recalculation.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {lastPrediction && (
+                        <div className="space-y-4 py-4">
+                            {/* Editable Food Name */}
+                            <div className="space-y-2">
+                                <Label htmlFor="food-name" className="flex items-center gap-2">
+                                    <Edit2 className="w-4 h-4" />
+                                    Food Name
+                                </Label>
+                                <Input
+                                    id="food-name"
+                                    value={editableFoodName}
+                                    onChange={(e) => setEditableFoodName(e.target.value)}
+                                    className="w-full"
+                                    placeholder="Enter food name"
+                                />
+                            </div>
+
+                            {/* Editable Portion */}
+                            <div className="space-y-2">
+                                <Label htmlFor="portion" className="flex items-center gap-2">
+                                    <Edit2 className="w-4 h-4" />
+                                    Portion Size
+                                </Label>
+                                <Input
+                                    id="portion"
+                                    value={editablePortion}
+                                    onChange={(e) => setEditablePortion(e.target.value)}
+                                    className="w-full"
+                                    placeholder="e.g., 200g, 1 cup, 1 serving"
+                                />
+                            </div>
+
+                            {/* Current Nutrition Info */}
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-2">
+                                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Nutrition Information
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Calories:</span>
+                                        <span className="ml-2 font-semibold">{lastPrediction.calories} kcal</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Protein:</span>
+                                        <span className="ml-2 font-semibold">{lastPrediction.macros.p}g</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Carbs:</span>
+                                        <span className="ml-2 font-semibold">{lastPrediction.macros.c}g</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-500 dark:text-gray-400">Fat:</span>
+                                        <span className="ml-2 font-semibold">{lastPrediction.macros.f}g</span>
+                                    </div>
+                                </div>
+                                {lastPrediction.source && (
+                                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                                        Source: {lastPrediction.source === 'openfoodfacts' ? 'OpenFoodFacts' : 
+                                                 lastPrediction.source === 'barcode' ? 'Barcode Label' : 
+                                                 'AI Pipeline'}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Recalculate Button */}
+                            {(editableFoodName !== lastPrediction.food_name || editablePortion !== lastPrediction.portion_detected) && (
+                                <Button
+                                    onClick={handleEditAndRecalculate}
+                                    disabled={isRecalculating}
+                                    className="w-full"
+                                    variant="outline"
+                                >
+                                    {isRecalculating ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Recalculating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="w-4 h-4 mr-2" />
+                                            Recalculate Macros
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowVerificationModal(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleConfirm} className="bg-purple-600 hover:bg-purple-700">
+                            Confirm & Add
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <style>{`
                 @keyframes scan-laser {

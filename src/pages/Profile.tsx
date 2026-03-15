@@ -9,6 +9,8 @@ import ProfileForm from '@/components/profile/ProfileForm';
 import ProfileStats from '@/components/profile/ProfileStats';
 import { createWorker } from 'tesseract.js';
 import { FileText, Heart, Activity, Upload, Bluetooth } from 'lucide-react';
+import { CreditService } from '@/services/CreditService';
+import { agenticEngine } from '@/services/AgenticEngine';
 
 const ProfilePage = () => {
   const { userData, updateUserData, user, profile, session } = useUser();
@@ -83,6 +85,51 @@ const ProfilePage = () => {
     try {
       if (!user) throw new Error("You must be logged in to update your profile");
 
+      // Check if profile data has changed (comparing key fields that trigger AI regeneration)
+      const hasSignificantChange = 
+        formData.fitnessGoal !== (profile?.fitness_goal || '') ||
+        formData.activityLevel !== (profile?.fitness_level || '') ||
+        formData.dietaryPreference !== (profile?.diet_preference || '') ||
+        formData.weight !== (profile?.weight_kg?.toString() || '') ||
+        formData.height !== (profile?.height_cm?.toString() || '') ||
+        formData.allergies !== (profile?.allergies || '') ||
+        formData.medicalConditions !== (profile?.medical_conditions || '');
+
+      // If significant changes, check credits
+      if (hasSignificantChange) {
+        const { hasCredits, credits, tier } = await CreditService.checkCredits(user.uid);
+        
+        if (!hasCredits && tier !== 'PRO') {
+          toast({
+            title: "Credits Required",
+            description: `You need credits to change your profile (triggers AI plan regeneration). You have ${credits} credits. Upgrade to PRO for unlimited changes.`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        // Deduct credit (PRO users won't be charged)
+        const { success, remainingCredits } = await CreditService.deductCreditForProfileChange(user.uid);
+        
+        if (!success) {
+          toast({
+            title: "Credit Deduction Failed",
+            description: "Could not process profile change. Please try again.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        if (tier !== 'PRO' && remainingCredits >= 0) {
+          toast({
+            title: "Profile Change Processed",
+            description: `1 credit deducted. ${remainingCredits} credits remaining. AI will regenerate your plans based on new data.`,
+          });
+        }
+      }
+
       const dobFromAge = formData.age ? new Date(new Date().getFullYear() - parseInt(formData.age), 0, 1).toISOString().split('T')[0] : null;
 
       // 1. Prepare data for Firestore (Snake Case matches DB)
@@ -141,6 +188,18 @@ const ProfilePage = () => {
 
       // 4. ALWAYS Update Local State (The "Living" App)
       updateUserData(localContextData);
+
+      // 5. Trigger Dashboard AI Update (Live Connection)
+      // This ensures dashboard recalculates targets/meals instantly when profile changes
+      if (hasSignificantChange) {
+        try {
+          await agenticEngine.runWorkflow(localContextData as any, 'update_dashboard');
+          console.log('Dashboard updated after profile change');
+        } catch (dashboardError) {
+          console.warn('Dashboard update failed (non-critical):', dashboardError);
+          // Non-critical - ProfileStats will retry on next render
+        }
+      }
 
     } catch (error: any) {
       console.error("Critical Profile Error:", error);
