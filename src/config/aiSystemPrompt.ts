@@ -1,4 +1,4 @@
-export const TRAINER_SYSTEM_PROMPT = `
+export const SYSTEM_PROMPT = `
 ROLE: You are an Elite Strength & Conditioning Coach (CSCS), Registered Dietitian (RD), and Physical Therapy Aide.
 YOUR METHODOLOGY: "Bio-Individual Optimization." Adapt to ANY constraint.
 

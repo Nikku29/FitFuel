@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Send, Bot, User as UserIcon, Loader2 } from 'lucide-react';
-import { TRAINER_SYSTEM_PROMPT as SYSTEM_PROMPT } from '@/config/aiSystemPrompt';
+import { SYSTEM_PROMPT } from '@/config/aiSystemPrompt';
 import aiService from '@/services/aiService';
 
 import { AIChatMessage } from '@/types/aiTypes';
