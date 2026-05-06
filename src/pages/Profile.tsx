@@ -248,7 +248,7 @@ const ProfilePage = () => {
   const connectHeartRate = async () => {
     setIsConnectingDevice(true);
     try {
-      // @ts-ignore - Web Bluetooth types might be missing
+      // @ts-expect-error - Web Bluetooth types might be missing
       if (!navigator.bluetooth) throw new Error("Bluetooth not supported");
 
       const device = await navigator.bluetooth.requestDevice({

@@ -660,7 +660,7 @@ const RecipePage = () => {
               </div>
 
               {/* AGENTIC INSIGHT BLOCK (Chef) */}
-              {/* @ts-ignore */}
+              {/* @ts-expect-error */}
               {selectedRecipe.chefNote && (
                 <div className="mx-8 mt-6 p-4 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 shadow-sm">
                   <div className="bg-orange-100 p-2 rounded-full h-fit">

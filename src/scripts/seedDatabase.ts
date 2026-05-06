@@ -129,20 +129,20 @@ export const seedDatabase = async () => {
 
         // Only exit if running in Node.js environment
         if (typeof process !== 'undefined') {
-            // @ts-ignore
+            // @ts-expect-error
             process.exit(0);
         }
     } catch (error) {
         console.error("❌ Error seeding database:", error);
         if (typeof process !== 'undefined') {
-            // @ts-ignore
+            // @ts-expect-error
             process.exit(1);
         }
     }
 };
 
 // Run directly only when executed as a script (not when imported)
-// @ts-ignore - process check for Node.js environment
+// @ts-expect-error - process check for Node.js environment
 if (typeof process !== 'undefined' && process.argv && process.argv[1]?.includes('seedDatabase')) {
     seedDatabase();
 }

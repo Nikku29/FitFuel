@@ -47,7 +47,7 @@ const AIOnboarding = () => {
         setIsLoading(true);
 
         // Check for routed query (from MoE Router)
-        // @ts-ignore
+        // @ts-expect-error
         const initialQuery = location.state?.initialQuery;
 
         const initialContext = `
