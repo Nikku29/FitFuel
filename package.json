@@ -7,7 +7,11 @@
     "dev": "vite --config config/vite.config.ts",
     "build": "vite build --config config/vite.config.ts",
     "preview": "vite preview --config config/vite.config.ts",
-    "lint": "eslint . --config config/eslint.config.js"
+    "lint": "eslint . --config config/.eslintrc.cjs",
+    "type-check": "tsc --noEmit --project config/tsconfig.json",
+    "audit-deps": "npm audit --audit-level moderate",
+    "scan-secrets": "node scripts/scan-secrets.cjs",
+    "pre-commit": "npm run lint && npm run type-check && npm run scan-secrets"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

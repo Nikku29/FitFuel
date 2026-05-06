@@ -1,0 +1,19 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "env": {
+    "VITE_SUPABASE_URL": "@supabase-url",
+    "VITE_SUPABASE_ANON_KEY": "@supabase-anon-key",
+    "VITE_OPENROUTER_API_KEY": "@openrouter-api-key",
+    "VITE_STRIPE_PUBLIC_KEY": "@stripe-public-key",
+    "VITE_APP_URL": "@app-url",
+    "VITE_APP_TITLE": "@app-title"
+  },
+  "functions": {
+    "src/pages/api/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
