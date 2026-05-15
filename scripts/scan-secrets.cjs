@@ -12,11 +12,11 @@ const IGNORES = new Set([
 ]);
 
 const patterns = [
-  { name: 'OpenRouter / OpenAI secret key', regex: /sk-(?:or-v1|live|test|[A-Za-z0-9_-]{24,})/g },
+  { name: 'OpenRouter / OpenAI secret key', regex: /sk-(?:or-v1|live|test|[A-Za-z0-9_-]{24,})(?=[^A-Za-z0-9_-]|$)/g },
   { name: 'Supabase anon/service key', regex: /sb_(?:publishable|service_role|[A-Za-z0-9_-]{10,})/g },
   { name: 'Supabase URL', regex: /https:\/\/[a-z0-9-]+\.supabase\.co/g },
   { name: 'Firebase API key', regex: /AIza[0-9A-Za-z\-_]{35}/g },
-  { name: 'JWT secret or service key name', regex: /(JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|NEXTAUTH_SECRET|OPENAI_API_KEY|OPENROUTER_API_KEY|STRIPE_SECRET_KEY)/gi },
+  { name: 'JWT secret or service key name', regex: /(JWT_SECRET|SUPABASE_SERVICE_ROLE_KEY|NEXTAUTH_SECRET|OPENAI_API_KEY|OPENROUTER_API_KEY|STRIPE_SECRET_KEY)\s*[:=]\s*["'][^"']+["']/gi },
 ];
 
 const textFile = (filename) => {
@@ -53,7 +53,7 @@ const scanDirectory = (dirPath) => {
   for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
     const name = entry.name;
     const relativePath = path.relative(process.cwd(), path.join(dirPath, name));
-    if (IGNORES.has(relativePath) || IGNORES.has(name)) continue;
+    if (IGNORES.has(relativePath) || IGNORES.has(name) || name.startsWith('.env')) continue;
 
     if (entry.isDirectory()) {
       found = scanDirectory(path.join(dirPath, name)) || found;

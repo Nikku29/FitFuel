@@ -111,8 +111,8 @@ const Signup = () => {
       if (error) throw error;
 
       if (user) {
-        // Create user profile in Firestore
-        await createProfile(user.uid, {
+        // Create user profile in Supabase
+        await createProfile(user.id, {
           email: user.email || '',
           full_name: name,
         });
@@ -138,24 +138,16 @@ const Signup = () => {
 
   const handleGoogleSignUp = async () => {
     try {
-      const { user, error } = await signInWithGoogle();
+      const { error } = await signInWithGoogle();
 
       if (error) throw error;
 
-      if (user) {
-        // Create or update user profile in Firestore
-        await createProfile(user.uid, {
-          email: user.email || '',
-          full_name: user.displayName || '',
-        });
-
-        toast({
-          title: "Success",
-          description: "Successfully signed up with Google! Please complete your profile.",
-        });
-
-        navigate('/profile');
-      }
+      // OAuth uses redirect flow - profile is auto-created by Supabase trigger
+      // UserContext will handle profile creation on auth state change
+      toast({
+        title: "Redirecting...",
+        description: "Connecting with Google...",
+      });
     } catch (error: any) {
       console.error("Google sign-up error:", error);
       toast({

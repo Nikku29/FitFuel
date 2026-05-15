@@ -35,6 +35,7 @@ import { Label } from "@/components/ui/label";
 import FoodCamera from '@/components/calories/FoodCamera';
 import CalorieAnalysisResult from '@/components/calories/CalorieAnalysisResult';
 import { useToast } from '@/hooks/use-toast';
+import MoEDemo from '@/components/MoEDemo';
 
 const Dashboard = () => {
   const { userData, user } = useUser(); // Get auth user for ID
@@ -70,10 +71,10 @@ const Dashboard = () => {
     if (!user) return;
     setLoadingLogs(true);
 
-    const { logs } = await getUserWorkoutLogs(user.uid);
+    const { logs } = await getUserWorkoutLogs(user.id);
     setWorkoutLogs(logs);
 
-    const { logs: nutrLogs } = await getNutritionLogs(user.uid, { limit: 200 });
+    const { logs: nutrLogs } = await getNutritionLogs(user.id, { limit: 200 });
     setNutritionLogs(nutrLogs);
 
     const now = new Date();
@@ -215,7 +216,7 @@ const Dashboard = () => {
     try {
       await import('@/integrations/firebase/firestore').then(({ logNutrition }) =>
         logNutrition({
-          userId: user.uid,
+          userId: user.id,
           foodName: analysisResult.foodName,
           calories: analysisResult.calories,
           macros: {
@@ -255,7 +256,7 @@ const Dashboard = () => {
     try {
       await import('@/integrations/firebase/firestore').then(({ logNutrition }) =>
         logNutrition({
-          userId: user.uid,
+          userId: user.id,
           foodName: manualEntryData.name,
           calories: parseInt(manualEntryData.calories, 10),
           macros: {
@@ -603,6 +604,9 @@ Calories Consumed Today: ${stats.caloriesConsumedToday} kcal / Target: ${stats.d
             </Card>
           </Link>
         </div>
+
+        {/* MoE AI Demo Section */}
+        <MoEDemo />
       </div>
     </div>
   );

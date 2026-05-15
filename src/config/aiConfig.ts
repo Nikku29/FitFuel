@@ -9,15 +9,15 @@
 export const AI_CONFIG = {
   BASE_URL: 'https://openrouter.ai/api/v1',
   MODELS: {
-    LOGIC: 'tngtech/deepseek-r1t2-chimera',       // For Workout Math & Plans
-    CREATIVE: 'mistralai/devstral-2512',          // For UI/UX & Meals
-    CHAT: 'xiaomi/mimo-v2-flash',                 // For Fast Chat
-    VISUAL: 'bytedance-seed/seedream-4.5',        // For Diagram Generation
-    VISION: 'openai/gpt-4o-mini',                 // For Food Camera (Reliable & Cheap) - DEPRECATED
+    LOGIC: 'tngtech/deepseek-r1t2-chimera:free',   // For Workout Math & Plans (Assembly-of-Experts)
+    CREATIVE: 'mistralai/devstral-2512',           // For UI/UX & Meals (keep current)
+    CHAT: 'xiaomi/mimo-v2-flash',                  // For Fast Chat (keep current)
+    VISUAL: 'bytedance-seed/seedream-4.5',         // For Diagram Generation (keep current)
+    VISION: 'google/gemma-3n-e4b-it:free',         // For Food Camera (Visual Grounding)
     // Nutrition Scanner MoE Pipeline Models
-    PORTION: 'allenai/molmo-2-8b-1024',           // Spatial Grounding & Portion Estimation
-    REASONING: 'google/gemini-2.0-flash-exp:free', // Identification & Nutritional Reasoning
-    STRUCTURING: 'qwen/qwen-2.5-vl-7b-instruct',  // Pure JSON extraction & formatting
+    PORTION: 'google/gemma-3n-e4b-it:free',        // Spatial Grounding & Portion Estimation
+    REASONING: 'tencent/hy3-preview:free',         // Identification & Nutritional Reasoning (Thinking Mode)
+    STRUCTURING: 'qwen/qwen3-next-80b-a3b-instruct:free', // Pure JSON extraction & formatting
   },
   HEADERS: (apiKey: string): Record<string, string> => {
     const referer = typeof window !== 'undefined' && window.location?.href

@@ -1,12 +1,11 @@
 
 import { useState, useEffect } from 'react';
-import { 
-  createAnonymousSession, 
-  getAnonymousSession, 
+import {
+  createAnonymousSession,
+  getAnonymousSession,
   updateAnonymousSession,
   deleteAnonymousSession
 } from '@/integrations/firebase/firestore';
-import { Timestamp } from 'firebase/firestore';
 
 interface AnonymousUserData {
   height_cm?: number;
@@ -29,7 +28,6 @@ export const useAnonymousSession = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // Check if we already have a session token
     const existingToken = localStorage.getItem('anonymous-session-token');
     if (existingToken) {
       setSessionToken(existingToken);
@@ -79,13 +77,13 @@ export const useAnonymousSession = () => {
     try {
       const token = generateSessionToken();
       const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24); // Expire in 24 hours
-      
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
       const { id, error } = await createAnonymousSession({
         session_token: token,
-        expires_at: expiresAt,
+        expires_at: expiresAt.toISOString(),
         ...userData
-      });
+      } as any);
 
       if (error) {
         console.error('Error creating session:', error);
@@ -96,7 +94,7 @@ export const useAnonymousSession = () => {
       setSessionId(id);
       setAnonymousData(userData);
       localStorage.setItem('anonymous-session-token', token);
-      
+
       return { success: true, data: { id, ...userData } };
     } catch (error) {
       console.error('Error creating session:', error);
@@ -110,8 +108,7 @@ export const useAnonymousSession = () => {
     if (!sessionId) return;
 
     try {
-      const { error } = await updateAnonymousSession(sessionId, userData);
-
+      const { error } = await updateAnonymousSession(sessionId, userData as any);
       if (error) throw error;
 
       setAnonymousData(prev => ({ ...prev, ...userData }));

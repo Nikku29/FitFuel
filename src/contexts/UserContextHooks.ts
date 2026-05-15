@@ -1,34 +1,36 @@
 
-import { getProfile, updateProfile as updateFirebaseProfile } from '@/integrations/firebase/firestore';
+import { getProfile, updateProfile as updateSupabaseProfile } from '@/integrations/firebase/firestore';
 import { UserProfile as ContextUserProfile, UserData, FitnessGoal, DietaryPreference, ActivityLevel, Gender } from './UserContextTypes';
-import { UserProfile as FirebaseUserProfile } from '@/integrations/firebase/types';
-import { User } from 'firebase/auth';
+import { UserProfile as DbUserProfile } from '@/integrations/firebase/types';
+import type { User } from '@supabase/supabase-js';
 
 export const fetchProfile = async (userId: string, setProfile: (profile: ContextUserProfile | null) => void, setUserData: (updater: (prevData: UserData) => UserData) => void) => {
   try {
-    const firebaseProfile = await getProfile(userId);
+    const dbProfile = await getProfile(userId);
     
-    if (firebaseProfile) {
-      // Convert Firebase profile to Context profile format
+    if (dbProfile) {
+      // Convert DB profile to Context profile format
       const contextProfile: ContextUserProfile = {
-        id: firebaseProfile.id,
-        username: firebaseProfile.username || null,
-        full_name: firebaseProfile.full_name || null,
-        email: firebaseProfile.email || null,
-        avatar_url: firebaseProfile.avatar_url || null,
-        gender: firebaseProfile.gender || null,
-        dob: firebaseProfile.dob || null,
-        height_cm: firebaseProfile.height_cm || null,
-        weight_kg: firebaseProfile.weight_kg || null,
-        location: firebaseProfile.location || null,
-        diet_preference: firebaseProfile.diet_preference || null,
-        fitness_level: firebaseProfile.fitness_level || null,
-        fitness_goal: firebaseProfile.fitness_goal || null,
-        allergies: firebaseProfile.allergies || null,
-        medical_conditions: firebaseProfile.medical_conditions || null,
-        activity_restrictions: firebaseProfile.activity_restrictions || null,
-        created_at: firebaseProfile.created_at?.toISOString() || null,
-        updated_at: firebaseProfile.updated_at?.toISOString() || null,
+        id: dbProfile.id,
+        username: dbProfile.username || null,
+        full_name: dbProfile.full_name || null,
+        email: dbProfile.email || null,
+        avatar_url: dbProfile.avatar_url || null,
+        gender: dbProfile.gender || null,
+        dob: dbProfile.dob || null,
+        height_cm: dbProfile.height_cm || null,
+        weight_kg: dbProfile.weight_kg || null,
+        location: dbProfile.location || null,
+        diet_preference: dbProfile.diet_preference || null,
+        fitness_level: dbProfile.fitness_level || null,
+        fitness_goal: dbProfile.fitness_goal || null,
+        allergies: dbProfile.allergies || null,
+        medical_conditions: dbProfile.medical_conditions || null,
+        activity_restrictions: dbProfile.activity_restrictions || null,
+        tier: (dbProfile.tier as 'FREE' | 'PRO') || 'FREE',
+        credits: dbProfile.credits ?? 0,
+        created_at: dbProfile.created_at || null,
+        updated_at: dbProfile.updated_at || null,
       };
       
       setProfile(contextProfile);
@@ -56,7 +58,7 @@ export const fetchProfile = async (userId: string, setProfile: (profile: Context
 export const updateUserProfile = async (user: User | null, profile: ContextUserProfile | null, data: Partial<UserData>) => {
   if (!user) return;
 
-  const profileUpdate: Partial<FirebaseUserProfile> = {};
+  const profileUpdate: Partial<DbUserProfile> = {};
   
   if (data.name !== undefined) profileUpdate.full_name = data.name;
   if (data.gender !== undefined) profileUpdate.gender = data.gender;
@@ -72,7 +74,7 @@ export const updateUserProfile = async (user: User | null, profile: ContextUserP
   
   if (Object.keys(profileUpdate).length > 0) {
     try {
-      const { error } = await updateFirebaseProfile(user.uid, profileUpdate);
+      const { error } = await updateSupabaseProfile(user.id, profileUpdate);
       if (error) console.error('Error updating profile:', error);
     } catch (error) {
       console.error('Error updating profile:', error);

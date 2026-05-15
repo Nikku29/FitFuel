@@ -1,5 +1,8 @@
-import { doc, getDoc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
+// ============================================================================
+// Credit Service (Supabase implementation)
+// ============================================================================
+
+import { supabase } from '@/integrations/supabase/client';
 
 export class CreditService {
     /**
@@ -8,21 +11,22 @@ export class CreditService {
      */
     static async checkCredits(userId: string): Promise<{ hasCredits: boolean; credits: number; tier: string }> {
         try {
-            const userRef = doc(db, 'users', userId);
-            const userSnap = await getDoc(userRef);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('credits, tier')
+                .eq('id', userId)
+                .single();
             
-            if (!userSnap.exists()) {
+            if (error || !data) {
                 return { hasCredits: false, credits: 0, tier: 'FREE' };
             }
             
-            const userData = userSnap.data();
-            const credits = userData.credits || 0;
-            const tier = userData.tier || 'FREE';
+            const credits = data.credits || 0;
+            const tier = data.tier || 'FREE';
             
-            // FREE tier gets 3 free profile changes per month
             // PRO tier gets unlimited
             if (tier === 'PRO') {
-                return { hasCredits: true, credits: -1, tier: 'PRO' }; // -1 means unlimited
+                return { hasCredits: true, credits: -1, tier: 'PRO' };
             }
             
             return { hasCredits: credits > 0, credits, tier: 'FREE' };
@@ -34,14 +38,12 @@ export class CreditService {
     
     /**
      * Deduct credit when user changes profile
-     * This triggers AI regeneration of plans
      */
     static async deductCreditForProfileChange(userId: string): Promise<{ success: boolean; remainingCredits: number }> {
         try {
-            const { hasCredits, credits, tier } = await this.checkCredits(userId);
+            const { hasCredits, tier } = await this.checkCredits(userId);
             
             if (tier === 'PRO') {
-                // PRO users don't need to deduct credits
                 return { success: true, remainingCredits: -1 };
             }
             
@@ -49,17 +51,41 @@ export class CreditService {
                 return { success: false, remainingCredits: 0 };
             }
             
-            const userRef = doc(db, 'users', userId);
-            await updateDoc(userRef, {
-                credits: increment(-1),
-                last_profile_change: serverTimestamp(),
-                profile_changes_count: increment(1)
-            });
+            // Use RPC-style atomic decrement
+            const { data, error } = await supabase.rpc('decrement_credits', { user_id: userId });
+            
+            if (error) {
+                // Fallback: direct update with read-modify-write
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('credits, profile_changes_count')
+                    .eq('id', userId)
+                    .single();
+                
+                const newCredits = Math.max(0, (profile?.credits || 0) - 1);
+                const newCount = (profile?.profile_changes_count || 0) + 1;
+                
+                await supabase
+                    .from('profiles')
+                    .update({
+                        credits: newCredits,
+                        last_profile_change: new Date().toISOString(),
+                        profile_changes_count: newCount
+                    })
+                    .eq('id', userId);
+                
+                console.log(`[CreditService] Deducted 1 credit. Remaining: ${newCredits}`);
+                return { success: true, remainingCredits: newCredits };
+            }
             
             // Get updated credits
-            const updatedSnap = await getDoc(userRef);
-            const updatedCredits = updatedSnap.data()?.credits || 0;
+            const { data: updatedProfile } = await supabase
+                .from('profiles')
+                .select('credits')
+                .eq('id', userId)
+                .single();
             
+            const updatedCredits = updatedProfile?.credits || 0;
             console.log(`[CreditService] Deducted 1 credit. Remaining: ${updatedCredits}`);
             
             return { success: true, remainingCredits: updatedCredits };
@@ -74,11 +100,23 @@ export class CreditService {
      */
     static async addCredits(userId: string, amount: number): Promise<void> {
         try {
-            const userRef = doc(db, 'users', userId);
-            await updateDoc(userRef, {
-                credits: increment(amount),
-                last_credit_update: serverTimestamp()
-            });
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('credits')
+                .eq('id', userId)
+                .single();
+            
+            const newCredits = (profile?.credits || 0) + amount;
+            
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    credits: newCredits,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', userId);
+            
+            if (error) throw error;
             console.log(`[CreditService] Added ${amount} credits to user ${userId}`);
         } catch (error) {
             console.error('Error adding credits:', error);
@@ -91,14 +129,18 @@ export class CreditService {
      */
     static async initializeCredits(userId: string, tier: 'FREE' | 'PRO' = 'FREE'): Promise<void> {
         try {
-            const userRef = doc(db, 'users', userId);
-            const initialCredits = tier === 'PRO' ? -1 : 3; // -1 = unlimited
+            const initialCredits = tier === 'PRO' ? -1 : 3;
             
-            await updateDoc(userRef, {
-                credits: initialCredits,
-                tier,
-                credits_initialized_at: serverTimestamp()
-            });
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    credits: initialCredits,
+                    tier,
+                    credits_initialized_at: new Date().toISOString()
+                })
+                .eq('id', userId);
+            
+            if (error) throw error;
             console.log(`[CreditService] Initialized ${initialCredits === -1 ? 'unlimited' : initialCredits} credits for ${tier} tier`);
         } catch (error) {
             console.error('Error initializing credits:', error);

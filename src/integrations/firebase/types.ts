@@ -1,3 +1,7 @@
+// ============================================================================
+// Shared types for database models
+// ============================================================================
+
 export interface UserProfile {
   id: string;
   email?: string;
@@ -16,8 +20,11 @@ export interface UserProfile {
   allergies?: string;
   medical_conditions?: string;
   activity_restrictions?: string;
-  created_at?: Date;
-  updated_at?: Date;
+  tier?: 'FREE' | 'PRO';
+  credits?: number;
+  onboarding_completed?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AnonymousSession {
@@ -35,6 +42,6 @@ export interface AnonymousSession {
   allergies?: string;
   medical_conditions?: string;
   activity_restrictions?: string;
-  expires_at: Date;
-  created_at: Date;
+  expires_at: string; // ISO string (was Date in Firebase version)
+  created_at: string;
 }

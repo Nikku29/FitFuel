@@ -47,7 +47,7 @@ const AIOnboarding = () => {
         setIsLoading(true);
 
         // Check for routed query (from MoE Router)
-        // @ts-expect-error
+        // @ts-expect-error: location.state typing is loose and may contain initialQuery
         const initialQuery = location.state?.initialQuery;
 
         const initialContext = `

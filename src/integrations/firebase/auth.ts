@@ -1,34 +1,18 @@
+// ============================================================================
+// Supabase Auth Layer (replaces Firebase Auth)
+// Same function signatures for backwards compatibility
+// ============================================================================
 
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  signInWithPopup,
-  GoogleAuthProvider,
-  updateProfile,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  PhoneAuthProvider,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
-  User,
-  onAuthStateChanged,
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence
-} from 'firebase/auth';
-import { auth } from './config';
-export { auth };
+import { supabase } from '@/integrations/supabase/client';
+import type { User, Session } from '@supabase/supabase-js';
 
-// STRICT: Force Local Persistence to prevent "Guest Mode" fallbacks on refresh
-setPersistence(auth, browserLocalPersistence).catch((error) => {
-  console.error("Auth Persistence Error:", error);
-});
+export { supabase as auth };
 
 export const signIn = async (email: string, password: string) => {
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return { user: userCredential.user, error: null };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return { user: data.user, error: null };
   } catch (error: any) {
     return { user: null, error };
   }
@@ -36,13 +20,18 @@ export const signIn = async (email: string, password: string) => {
 
 export const signUp = async (email: string, password: string, displayName?: string) => {
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-
-    if (displayName && userCredential.user) {
-      await updateProfile(userCredential.user, { displayName });
-    }
-
-    return { user: userCredential.user, error: null };
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: displayName || '',
+          name: displayName || '',
+        }
+      }
+    });
+    if (error) throw error;
+    return { user: data.user, error: null };
   } catch (error: any) {
     return { user: null, error };
   }
@@ -50,9 +39,30 @@ export const signUp = async (email: string, password: string, displayName?: stri
 
 export const signInWithGoogle = async () => {
   try {
-    const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    return { user: userCredential.user, error: null };
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      }
+    });
+    if (error) throw error;
+    // OAuth redirects, so user won't be immediately available
+    return { user: null, error: null };
+  } catch (error: any) {
+    return { user: null, error };
+  }
+};
+
+export const signInWithGithub = async () => {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      }
+    });
+    if (error) throw error;
+    return { user: null, error: null };
   } catch (error: any) {
     return { user: null, error };
   }
@@ -60,69 +70,61 @@ export const signInWithGoogle = async () => {
 
 export const logOut = async () => {
   try {
-    await signOut(auth);
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     return { error: null };
   } catch (error: any) {
     return { error };
   }
 };
 
-// Password reset
 export const resetPassword = async (email: string) => {
   try {
-    await sendPasswordResetEmail(auth, email);
-    return { error: null };
-  } catch (error: any) {
-    return { error };
-  }
-};
-
-// Email verification
-export const sendVerificationEmail = async (user: User) => {
-  try {
-    await sendEmailVerification(user);
-    return { error: null };
-  } catch (error: any) {
-    return { error };
-  }
-};
-
-// Phone authentication
-export const setupRecaptcha = (containerId: string) => {
-  try {
-    const recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-      size: 'invisible',
-      callback: () => {
-        // reCAPTCHA solved
-      }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     });
-    return { verifier: recaptchaVerifier, error: null };
-  } catch (error: any) {
-    return { verifier: null, error };
-  }
-};
-
-export const sendPhoneVerification = async (phoneNumber: string, recaptchaVerifier: RecaptchaVerifier) => {
-  try {
-    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-    return { confirmationResult, error: null };
-  } catch (error: any) {
-    return { confirmationResult: null, error };
-  }
-};
-
-// Session persistence
-export const setSessionPersistence = async (persistent: boolean = true) => {
-  try {
-    const persistence = persistent ? browserLocalPersistence : browserSessionPersistence;
-    await setPersistence(auth, persistence);
+    if (error) throw error;
     return { error: null };
   } catch (error: any) {
     return { error };
   }
 };
 
-// Auth state observer
-export const onAuthStateChange = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, callback);
+// Supabase handles email verification automatically via settings
+export const sendVerificationEmail = async (_user: User) => {
+  // Supabase sends verification emails automatically on signup
+  // if email confirmations are enabled in the dashboard
+  return { error: null };
 };
+
+// Supabase handles session persistence automatically
+export const setSessionPersistence = async (_persistent: boolean = true) => {
+  // Supabase uses localStorage by default with autoRefreshToken
+  return { error: null };
+};
+
+// Auth state observer (same API as Firebase's onAuthStateChanged)
+export const onAuthStateChange = (callback: (user: User | null) => void) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      callback(session?.user ?? null);
+    }
+  );
+  // Return unsubscribe function
+  return () => subscription.unsubscribe();
+};
+
+// Helper to get current session
+export const getSession = async () => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  return { session, error };
+};
+
+// Helper to get current user
+export const getCurrentUser = async () => {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  return { user, error };
+};
+
+// Re-export types
+export type { User, Session };

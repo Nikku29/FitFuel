@@ -16,14 +16,10 @@ import NaturalLanguageInput from '@/components/ui/NaturalLanguageInput';
 import { FoodPrediction } from '@/services/vision/nutritionScanner';
 import { saveAiRecipe, logNutrition } from '@/integrations/firebase/firestore';
 import { validateRecipe, Recipe } from '@/utils/dietaryValidator';
-
-// Firebase Imports
-import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
-import { auth } from '@/integrations/firebase/auth';
+import { supabase } from '@/integrations/supabase/client';
 
 // ============================================================================
-// NO HARDCODED DATA - ALL RECIPES COME FROM FIRESTORE
+// ALL RECIPES COME FROM SUPABASE
 // ============================================================================
 
 interface FirestoreRecipe {
@@ -74,47 +70,64 @@ const RecipePage = () => {
   }, [userData]);
 
   // ============================================================================
-  // FIRESTORE SUBSCRIPTION: Global Recipes Collection
+  // SUPABASE QUERY: Global Recipes Collection
   // ============================================================================
   useEffect(() => {
     // GATEKEEPER: Serve Static Data for Free Tier
     if (GatekeeperService.enforceStaticMode(userData)) {
       console.log("🔒 Gatekeeper: Serving Static Recipes for Free Tier");
-      // Map Static Recipes to Firestore Shape
       const staticMapped = STATIC_RECIPES.map(r => ({
         ...r,
         source: 'seeded' as const
       }));
-      setFirestoreRecipes(staticMapped as any); // Cast to ignore slight type diffs if any
+      setFirestoreRecipes(staticMapped as any);
       setLoading(false);
       return;
     }
 
-    const recipesRef = collection(db, 'recipes');
-    const q = query(recipesRef, orderBy('title'));
+    const fetchRecipes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('recipes')
+          .select('*')
+          .order('title');
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const recipes: FirestoreRecipe[] = [];
-      snapshot.forEach((doc) => {
-        recipes.push({ id: doc.id, ...doc.data() } as FirestoreRecipe);
-      });
-      setFirestoreRecipes(recipes);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching recipes:', error);
-      setLoading(false);
-      toast({
-        title: 'Error Loading Recipes',
-        description: 'Could not fetch recipes from database.',
-        variant: 'destructive'
-      });
-    });
+        if (error) throw error;
 
-    return () => unsubscribe();
-  }, [userData]); // Add userData dependency
+        const recipes: FirestoreRecipe[] = (data || []).map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          image: row.image,
+          prepTime: row.prep_time,
+          calories: row.calories,
+          category: row.category,
+          dietaryType: row.dietary_type,
+          tags: row.tags || [],
+          ingredients: row.ingredients || [],
+          steps: row.steps || [],
+          source: row.source || 'seeded',
+          servingSize: row.serving_size,
+          nutritionFacts: row.nutrition_facts
+        }));
+        setFirestoreRecipes(recipes);
+      } catch (error) {
+        console.error('Error fetching recipes:', error);
+        toast({
+          title: 'Error Loading Recipes',
+          description: 'Could not fetch recipes from database.',
+          variant: 'destructive'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRecipes();
+  }, [userData]);
 
   // ============================================================================
-  // FIRESTORE SUBSCRIPTION: User's AI-Generated Recipes
+  // SUPABASE QUERY: User's AI-Generated Recipes
   // ============================================================================
   useEffect(() => {
     // GATEKEEPER: Skip user generated recipes for Free Tier
@@ -123,41 +136,41 @@ const RecipePage = () => {
       return;
     }
 
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
+    if (!user) {
       setUserGeneratedRecipes([]);
       return;
     }
 
-    // Fetch from ai_recipes collection filtered by userId
-    const aiRecipesRef = collection(db, 'ai_recipes');
-    const q = query(aiRecipesRef, where('userId', '==', currentUser.uid));
+    const fetchUserRecipes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('ai_recipes')
+          .select('*')
+          .eq('user_id', user.id);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const recipes: FirestoreRecipe[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        recipes.push({
-          id: doc.id,
-          title: data.title || 'AI Recipe',
-          description: data.description || '',
-          prepTime: data.prepTime || data.prep_time || '30 mins',
-          calories: data.calories || 0,
-          category: data.category || 'lunch',
-          dietaryType: data.dietaryType || data.dietary_type || 'vegetarian',
-          tags: data.tags || [],
-          ingredients: data.ingredients || [],
-          steps: data.steps || data.instructions || [],
+        if (error) throw error;
+
+        const recipes: FirestoreRecipe[] = (data || []).map((row: any) => ({
+          id: row.id,
+          title: row.title || 'AI Recipe',
+          description: row.description || '',
+          prepTime: row.prep_time || '30 mins',
+          calories: row.calories || 0,
+          category: row.category || 'lunch',
+          dietaryType: row.dietary_type || 'vegetarian',
+          tags: row.tags || [],
+          ingredients: row.ingredients || [],
+          steps: row.steps || [],
           source: 'ai_generated'
-        } as FirestoreRecipe);
-      });
-      setUserGeneratedRecipes(recipes);
-    }, (error) => {
-      console.error('Error fetching user AI recipes:', error);
-    });
+        }));
+        setUserGeneratedRecipes(recipes);
+      } catch (error) {
+        console.error('Error fetching user AI recipes:', error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [auth.currentUser?.uid]);
+    fetchUserRecipes();
+  }, [user?.id, userData]);
 
   // ============================================================================
   // COMBINE ALL RECIPES
@@ -635,7 +648,7 @@ const RecipePage = () => {
                       onClick={async () => {
                         try {
                           await logNutrition({
-                            userId: user.uid,
+                            userId: user.id,
                             foodName: selectedRecipe.title,
                             calories: selectedRecipe.calories || 0,
                             macros: {
@@ -660,7 +673,7 @@ const RecipePage = () => {
               </div>
 
               {/* AGENTIC INSIGHT BLOCK (Chef) */}
-              {/* @ts-expect-error */}
+              {/* @ts-expect-error: selectedRecipe might contain chefNote internally via custom additions */}
               {selectedRecipe.chefNote && (
                 <div className="mx-8 mt-6 p-4 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 shadow-sm">
                   <div className="bg-orange-100 p-2 rounded-full h-fit">

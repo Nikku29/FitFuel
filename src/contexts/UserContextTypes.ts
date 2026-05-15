@@ -1,5 +1,5 @@
 
-import { User as FirebaseUser } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 
 export type FitnessGoal = 'Weight Loss' | 'Muscle Gain' | 'General Fitness' | 'Endurance' | '';
 export type DietaryPreference = 'Veg' | 'Non-Veg' | 'Vegan' | 'Eggetarian' | 'Other' | '';
@@ -54,9 +54,9 @@ export interface UserContextProps {
   updateUserData: (data: Partial<UserData>) => void;
   isLoading: boolean;
   clearUserData: () => void;
-  user: FirebaseUser | null;
+  user: User | null;
   profile: UserProfile | null;
-  session: { user: FirebaseUser } | null;
+  session: { user: User } | null;
 }
 
 export const initialUserData: UserData = {

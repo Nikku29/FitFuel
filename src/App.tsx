@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { UserProvider } from "./contexts/UserContext";
+import { MoEProvider } from "./contexts/MoEContext";
 import Navbar from "./components/navigation/Navbar";
 import Footer from "./components/navigation/Footer";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -102,21 +103,23 @@ const App = () => {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <UserProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <div className="flex flex-col min-h-screen">
-                <Navbar />
-                <main className="flex-grow">
-                  <ErrorBoundary>
-                    <AnimatedRoutes />
-                  </ErrorBoundary>
-                </main>
-                <Footer />
-              </div>
-            </BrowserRouter>
-          </TooltipProvider>
+          <MoEProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <div className="flex flex-col min-h-screen">
+                  <Navbar />
+                  <main className="flex-grow">
+                    <ErrorBoundary>
+                      <AnimatedRoutes />
+                    </ErrorBoundary>
+                  </main>
+                  <Footer />
+                </div>
+              </BrowserRouter>
+            </TooltipProvider>
+          </MoEProvider>
         </UserProvider>
       </QueryClientProvider>
     </ErrorBoundary>

@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/integrations/firebase/config';
+import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@supabase/supabase-js';
 import { logOut } from '@/integrations/firebase/auth';
 import { UserData, UserProfile, UserContextProps, initialUserData } from './UserContextTypes';
 import { fetchProfile } from './UserContextHooks';
-// Import createProfile to fix missing accounts
 import { createProfile } from '@/integrations/firebase/firestore';
 import { CreditService } from '@/services/CreditService';
 
@@ -22,82 +21,33 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
 
       try {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-          console.log('Auth state changed:', currentUser?.email);
-          setUser(currentUser);
-          setSession(currentUser ? { user: currentUser } : null);
+        // Get initial session
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        
+        if (currentSession?.user) {
+          setUser(currentSession.user);
+          setSession({ user: currentSession.user });
+          await loadUserProfile(currentSession.user);
+        }
 
-          if (currentUser) {
-            // 1. Try to fetch the profile
-            await fetchProfile(currentUser.uid, async (fetchedProfile) => {
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, newSession) => {
+            console.log('Auth state changed:', event, newSession?.user?.email);
+            const currentUser = newSession?.user ?? null;
+            setUser(currentUser);
+            setSession(currentUser ? { user: currentUser } : null);
 
-              // === SELF-HEALING LOGIC START ===
-              if (!fetchedProfile) {
-                console.warn("User logged in but no DB Profile found. Auto-creating...");
-
-                const newProfile = {
-                  id: currentUser.uid,
-                  email: currentUser.email || "",
-                  full_name: currentUser.displayName || "New User",
-                  username: currentUser.email?.split('@')[0] || "user",
-                  created_at: new Date(),
-                  updated_at: new Date(),
-                  // Default generic values so the app doesn't crash
-                  fitness_goal: "General Fitness",
-                  fitness_level: "Beginner",
-                  diet_preference: "Vegetarian"
-                };
-
-                // Create it in Firestore immediately
-                await createProfile(currentUser.uid, newProfile);
-
-                // Initialize credits for new user
-                try {
-                  await CreditService.initializeCredits(currentUser.uid, 'FREE');
-                } catch (creditError) {
-                  console.warn('Could not initialize credits:', creditError);
-                }
-
-                // Set local state immediately so UI updates
-                setProfile(newProfile as any);
-                setUserData(prev => ({
-                  ...prev,
-                  name: newProfile.full_name,
-                  tier: 'FREE',
-                  credits: 3 // FREE tier gets 3 credits
-                }));
-                return;
-              }
-              // === SELF-HEALING LOGIC END ===
-
-              setProfile(fetchedProfile);
-              
-              // Initialize credits if not set (for existing users)
-              const tier = fetchedProfile.tier || 'FREE';
-              let credits = fetchedProfile.credits;
-              if (credits === undefined || credits === null) {
-                try {
-                  await CreditService.initializeCredits(currentUser.uid, tier);
-                  credits = tier === 'PRO' ? -1 : 3;
-                } catch (creditError) {
-                  console.warn('Could not initialize credits:', creditError);
-                  credits = tier === 'PRO' ? -1 : 0;
-                }
-              }
-              
-              setUserData(prev => ({
-                ...prev,
-                tier,
-                credits: credits || 0
-              }));
-            }, setUserData);
-          } else {
-            setProfile(null);
-            setUserData(initialUserData);
+            if (currentUser) {
+              await loadUserProfile(currentUser);
+            } else {
+              setProfile(null);
+              setUserData(initialUserData);
+            }
           }
-        });
+        );
 
-        return unsubscribe;
+        return () => subscription.unsubscribe();
       } catch (error) {
         console.error('Error initializing user context:', error);
       } finally {
@@ -108,19 +58,77 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initialize();
   }, []);
 
+  const loadUserProfile = async (currentUser: User) => {
+    await fetchProfile(currentUser.id, async (fetchedProfile) => {
+      // === SELF-HEALING LOGIC START ===
+      if (!fetchedProfile) {
+        console.warn("User logged in but no DB Profile found. Auto-creating...");
+
+        const newProfile = {
+          id: currentUser.id,
+          email: currentUser.email || "",
+          full_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || "New User",
+          username: currentUser.email?.split('@')[0] || "user",
+          fitness_goal: "General Fitness",
+          fitness_level: "Beginner",
+          diet_preference: "Vegetarian"
+        };
+
+        // Create it in Supabase immediately
+        await createProfile(currentUser.id, newProfile);
+
+        // Initialize credits for new user
+        try {
+          await CreditService.initializeCredits(currentUser.id, 'FREE');
+        } catch (creditError) {
+          console.warn('Could not initialize credits:', creditError);
+        }
+
+        // Set local state immediately so UI updates
+        setProfile(newProfile as any);
+        setUserData(prev => ({
+          ...prev,
+          name: newProfile.full_name,
+          tier: 'FREE',
+          credits: 3
+        }));
+        return;
+      }
+      // === SELF-HEALING LOGIC END ===
+
+      setProfile(fetchedProfile);
+      
+      // Initialize credits if not set (for existing users)
+      const tier = fetchedProfile.tier || 'FREE';
+      let credits = fetchedProfile.credits;
+      if (credits === undefined || credits === null) {
+        try {
+          await CreditService.initializeCredits(currentUser.id, tier);
+          credits = tier === 'PRO' ? -1 : 3;
+        } catch (creditError) {
+          console.warn('Could not initialize credits:', creditError);
+          credits = tier === 'PRO' ? -1 : 0;
+        }
+      }
+      
+      setUserData(prev => ({
+        ...prev,
+        tier,
+        credits: credits || 0
+      }));
+    }, setUserData);
+  };
+
   const updateUserData = async (data: Partial<UserData>) => {
-    // Safety check: Don't update if no user logged in
     if (!user) return;
 
     setUserData(prevData => {
       const newData = { ...prevData, ...data };
-      // Fire and forget update (handled in hooks)
       import('./UserContextHooks').then(({ updateUserProfile }) => {
         updateUserProfile(user, profile, data).catch(err => {
           console.error("Failed to save profile:", err);
-          // If permission denied (missing doc), try creating it
-          if (String(err).includes("permission")) {
-            createProfile(user.uid, { full_name: data.name });
+          if (String(err).includes("permission") || String(err).includes("42501")) {
+            createProfile(user.id, { full_name: data.name });
           }
         });
       });

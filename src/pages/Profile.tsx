@@ -97,7 +97,7 @@ const ProfilePage = () => {
 
       // If significant changes, check credits
       if (hasSignificantChange) {
-        const { hasCredits, credits, tier } = await CreditService.checkCredits(user.uid);
+        const { hasCredits, credits, tier } = await CreditService.checkCredits(user.id);
         
         if (!hasCredits && tier !== 'PRO') {
           toast({
@@ -110,7 +110,7 @@ const ProfilePage = () => {
         }
 
         // Deduct credit (PRO users won't be charged)
-        const { success, remainingCredits } = await CreditService.deductCreditForProfileChange(user.uid);
+        const { success, remainingCredits } = await CreditService.deductCreditForProfileChange(user.id);
         
         if (!success) {
           toast({
@@ -170,7 +170,7 @@ const ProfilePage = () => {
 
       // 3. Attempt Cloud Sync
       try {
-        const { error } = await updateProfile(user.uid, firestoreData);
+        const { error } = await updateProfile(user.id, firestoreData);
         if (error) throw error;
 
         toast({

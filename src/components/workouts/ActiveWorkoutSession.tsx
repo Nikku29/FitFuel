@@ -43,8 +43,7 @@ const parseDuration = (dur: string | undefined): number => {
     return val;
 };
 
-import { db } from '@/integrations/firebase/config';
-import { doc, setDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/contexts/UserContext';
 import { SafetySanitizer } from '@/services/SafetySanitizer';
 import { logWorkout } from '@/integrations/firebase/firestore';
@@ -208,12 +207,24 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
                 }, 0);
 
                 const today = new Date().toISOString().split('T')[0];
-                const logRef = doc(db, 'users', user.uid, 'daily_logs', today);
-                await setDoc(logRef, {
-                    calories_burned: increment(totalBurn),
-                    workouts_completed: increment(1),
-                    last_updated: serverTimestamp()
-                }, { merge: true });
+
+                // Upsert daily log in Supabase
+                const { data: existingLog } = await supabase
+                    .from('daily_logs')
+                    .select('calories_burned, workouts_completed')
+                    .eq('user_id', user.id)
+                    .eq('date', today)
+                    .single();
+
+                await supabase
+                    .from('daily_logs')
+                    .upsert({
+                        user_id: user.id,
+                        date: today,
+                        calories_burned: (existingLog?.calories_burned || 0) + totalBurn,
+                        workouts_completed: (existingLog?.workouts_completed || 0) + 1,
+                        last_updated: new Date().toISOString()
+                    }, { onConflict: 'user_id,date' });
 
                 const totalDurationMinutes = Math.round(
                     steps
@@ -222,7 +233,7 @@ export const ActiveWorkoutSession: React.FC<ActiveWorkoutSessionProps> = ({
                 );
 
                 const { error } = await logWorkout({
-                    userId: user.uid,
+                    userId: user.id,
                     workoutId: `session-${Date.now()}`,
                     workoutTitle: (workout as any).title || 'Guided Session',
                     duration: totalDurationMinutes || 1,

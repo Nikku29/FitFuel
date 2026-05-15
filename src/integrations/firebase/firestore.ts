@@ -1,47 +1,49 @@
+// ============================================================================
+// Supabase Database Layer (replaces Firestore)
+// Same function signatures for backwards compatibility
+// ============================================================================
 
-import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  Timestamp
-} from 'firebase/firestore';
-import { db } from './config';
+import { supabase } from '@/integrations/supabase/client';
 import { UserProfile, AnonymousSession } from './types';
 
-// Profile operations replaced by 'users' collection standardization
+// ============================================================================
+// PROFILE OPERATIONS
+// ============================================================================
+
 export const getProfile = async (userId: string): Promise<UserProfile | null> => {
   try {
-    const docRef = doc(db, 'users', userId);
-    const docSnap = await getDoc(docRef);
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
 
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      // Map 'users' schema back to 'UserProfile' interface expected by frontend
-      return {
-        id: docSnap.id,
-        full_name: data.displayName || data.full_name,
-        email: data.email,
-        username: data.username,
-        dob: data.dob,
-        gender: data.gender,
-        weight_kg: data.weight || data.weight_kg,
-        height_cm: data.height || data.height_cm,
-        location: data.location,
-        fitness_goal: data.fitnessGoal || data.fitness_goal,
-        fitness_level: data.activityLevel || data.fitness_level,
-        diet_preference: data.dietaryPreference || data.diet_preference,
-        created_at: data.createdAt?.toDate ? data.createdAt.toDate() : undefined,
-        updated_at: data.updatedAt?.toDate ? data.updatedAt.toDate() : undefined
-      } as any;
-    }
-    return null;
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      full_name: data.full_name,
+      email: data.email,
+      username: data.username,
+      avatar_url: data.avatar_url,
+      dob: data.dob,
+      gender: data.gender,
+      weight_kg: data.weight_kg,
+      height_cm: data.height_cm,
+      body_type: data.body_type,
+      location: data.location,
+      fitness_goal: data.fitness_goal,
+      fitness_level: data.fitness_level,
+      diet_preference: data.diet_preference,
+      allergies: data.allergies,
+      medical_conditions: data.medical_conditions,
+      activity_restrictions: data.activity_restrictions,
+      tier: data.tier,
+      credits: data.credits,
+      onboarding_completed: data.onboarding_completed,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    } as UserProfile;
   } catch (error) {
     console.error('Error fetching profile:', error);
     return null;
@@ -50,12 +52,15 @@ export const getProfile = async (userId: string): Promise<UserProfile | null> =>
 
 export const createProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   try {
-    const docRef = doc(db, 'users', userId);
-    // Merge provided data, preferring camelCase for new standard but supporting legacy keys
-    await setDoc(docRef, {
-      ...profileData,
-      updatedAt: Timestamp.now()
-    }, { merge: true });
+    const { error } = await supabase
+      .from('profiles')
+      .upsert({
+        id: userId,
+        ...profileData,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (error) throw error;
     return { error: null };
   } catch (error) {
     console.error('Error creating profile:', error);
@@ -65,11 +70,21 @@ export const createProfile = async (userId: string, profileData: Partial<UserPro
 
 export const updateProfile = async (userId: string, profileData: Partial<UserProfile>) => {
   try {
-    const docRef = doc(db, 'users', userId);
-    await setDoc(docRef, {
-      ...profileData,
-      updatedAt: Timestamp.now()
-    }, { merge: true }); // Use setDoc with merge to ensure it works even if document doesn't exist
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        ...profileData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId);
+
+    if (error) {
+      // If row doesn't exist yet, upsert
+      if (error.code === 'PGRST116') {
+        return createProfile(userId, profileData);
+      }
+      throw error;
+    }
     return { error: null };
   } catch (error) {
     console.error('Error updating profile:', error);
@@ -77,15 +92,35 @@ export const updateProfile = async (userId: string, profileData: Partial<UserPro
   }
 };
 
-// Anonymous session operations
+// ============================================================================
+// ANONYMOUS SESSION OPERATIONS
+// ============================================================================
+
 export const createAnonymousSession = async (sessionData: Omit<AnonymousSession, 'id' | 'created_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'anonymous_sessions'), {
-      ...sessionData,
-      expires_at: Timestamp.fromDate(sessionData.expires_at),
-      created_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('anonymous_sessions')
+      .insert({
+        session_token: sessionData.session_token,
+        height_cm: sessionData.height_cm,
+        weight_kg: sessionData.weight_kg,
+        age: sessionData.age,
+        gender: sessionData.gender,
+        body_type: sessionData.body_type,
+        location: sessionData.location,
+        diet_preference: sessionData.diet_preference,
+        fitness_level: sessionData.fitness_level,
+        fitness_goal: sessionData.fitness_goal,
+        allergies: sessionData.allergies,
+        medical_conditions: sessionData.medical_conditions,
+        activity_restrictions: sessionData.activity_restrictions,
+        expires_at: sessionData.expires_at
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error creating anonymous session:', error);
     return { id: null, error };
@@ -94,24 +129,15 @@ export const createAnonymousSession = async (sessionData: Omit<AnonymousSession,
 
 export const getAnonymousSession = async (sessionToken: string): Promise<AnonymousSession | null> => {
   try {
-    const q = query(
-      collection(db, 'anonymous_sessions'),
-      where('session_token', '==', sessionToken),
-      where('expires_at', '>', Timestamp.now())
-    );
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('anonymous_sessions')
+      .select('*')
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .single();
 
-    if (!querySnapshot.empty) {
-      const docData = querySnapshot.docs[0];
-      const data = docData.data();
-      return {
-        id: docData.id,
-        ...data,
-        expires_at: data.expires_at.toDate(),
-        created_at: data.created_at.toDate()
-      } as AnonymousSession;
-    }
-    return null;
+    if (error || !data) return null;
+    return data as AnonymousSession;
   } catch (error) {
     console.error('Error fetching anonymous session:', error);
     return null;
@@ -120,8 +146,12 @@ export const getAnonymousSession = async (sessionToken: string): Promise<Anonymo
 
 export const updateAnonymousSession = async (sessionId: string, sessionData: Partial<AnonymousSession>) => {
   try {
-    const docRef = doc(db, 'anonymous_sessions', sessionId);
-    await updateDoc(docRef, sessionData);
+    const { error } = await supabase
+      .from('anonymous_sessions')
+      .update(sessionData)
+      .eq('id', sessionId);
+
+    if (error) throw error;
     return { error: null };
   } catch (error) {
     console.error('Error updating anonymous session:', error);
@@ -131,8 +161,12 @@ export const updateAnonymousSession = async (sessionId: string, sessionData: Par
 
 export const deleteAnonymousSession = async (sessionId: string) => {
   try {
-    const docRef = doc(db, 'anonymous_sessions', sessionId);
-    await deleteDoc(docRef);
+    const { error } = await supabase
+      .from('anonymous_sessions')
+      .delete()
+      .eq('id', sessionId);
+
+    if (error) throw error;
     return { error: null };
   } catch (error) {
     console.error('Error deleting anonymous session:', error);
@@ -140,37 +174,50 @@ export const deleteAnonymousSession = async (sessionId: string) => {
   }
 };
 
-// Extended Collections Operations
+// ============================================================================
+// WORKOUT LOGS
+// ============================================================================
 
-// Workout Logs
 export interface WorkoutLog {
   id?: string;
   userId: string;
   workoutId: string;
   workoutTitle: string;
-  duration: number; // in minutes
+  duration: number;
   caloriesBurned: number;
   exercises: {
     name: string;
     sets?: number;
-    reps?: number;
+    reps?: number | string;
     weight?: number;
     duration?: number;
   }[];
   notes?: string;
-  rating?: number; // 1-5
+  rating?: number;
   date: Date;
   created_at?: Date;
 }
 
 export const logWorkout = async (workoutLog: Omit<WorkoutLog, 'id' | 'created_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'workout_logs'), {
-      ...workoutLog,
-      date: Timestamp.fromDate(workoutLog.date),
-      created_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('workout_logs')
+      .insert({
+        user_id: workoutLog.userId,
+        workout_id: workoutLog.workoutId,
+        workout_title: workoutLog.workoutTitle,
+        duration: workoutLog.duration,
+        calories_burned: workoutLog.caloriesBurned,
+        exercises: workoutLog.exercises,
+        notes: workoutLog.notes,
+        rating: workoutLog.rating,
+        date: workoutLog.date.toISOString()
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error logging workout:', error);
     return { id: null, error };
@@ -179,20 +226,28 @@ export const logWorkout = async (workoutLog: Omit<WorkoutLog, 'id' | 'created_at
 
 export const getUserWorkoutLogs = async (userId: string, limit: number = 50) => {
   try {
-    const q = query(
-      collection(db, 'workout_logs'),
-      where('userId', '==', userId),
-      // orderBy('date', 'desc'),
-      // limitQuery(limit)
-    );
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('workout_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(limit);
 
-    const logs = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: doc.data().date.toDate(),
-      created_at: doc.data().created_at?.toDate()
-    })) as WorkoutLog[];
+    if (error) throw error;
+
+    const logs: WorkoutLog[] = (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      workoutId: row.workout_id,
+      workoutTitle: row.workout_title,
+      duration: row.duration,
+      caloriesBurned: row.calories_burned,
+      exercises: row.exercises || [],
+      notes: row.notes,
+      rating: row.rating,
+      date: new Date(row.date),
+      created_at: row.created_at ? new Date(row.created_at) : undefined
+    }));
 
     return { logs, error: null };
   } catch (error) {
@@ -201,14 +256,16 @@ export const getUserWorkoutLogs = async (userId: string, limit: number = 50) => 
   }
 };
 
-// Workout Plans
+// ============================================================================
+// WORKOUT PLANS
+// ============================================================================
+
 export interface WorkoutPlan {
   id?: string;
   userId: string;
   title: string;
   description?: string;
-  workoutIds: string[];
-  // AI Generated Content Support
+  workoutIds?: string[];
   exercises?: {
     name: string;
     duration?: string;
@@ -220,30 +277,34 @@ export interface WorkoutPlan {
   difficulty?: string;
   duration?: string;
   benefits?: string[];
-
-  schedule: {
-    monday?: string[];
-    tuesday?: string[];
-    wednesday?: string[];
-    thursday?: string[];
-    friday?: string[];
-    saturday?: string[];
-    sunday?: string[];
-  };
+  schedule?: Record<string, string[]>;
   isActive: boolean;
-  isFavorite?: boolean; // Added for User Request
+  isFavorite?: boolean;
   created_at?: Date;
   updated_at?: Date;
 }
 
 export const createWorkoutPlan = async (plan: Omit<WorkoutPlan, 'id' | 'created_at' | 'updated_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'workout_plans'), {
-      ...plan,
-      created_at: Timestamp.now(),
-      updated_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('workout_plans')
+      .insert({
+        user_id: plan.userId,
+        title: plan.title,
+        description: plan.description,
+        exercises: plan.exercises || [],
+        difficulty: plan.difficulty,
+        duration: plan.duration,
+        benefits: plan.benefits || [],
+        schedule: plan.schedule || {},
+        is_active: plan.isActive,
+        is_favorite: plan.isFavorite || false
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error creating workout plan:', error);
     return { id: null, error };
@@ -252,18 +313,28 @@ export const createWorkoutPlan = async (plan: Omit<WorkoutPlan, 'id' | 'created_
 
 export const getUserWorkoutPlans = async (userId: string) => {
   try {
-    const q = query(
-      collection(db, 'workout_plans'),
-      where('userId', '==', userId)
-    );
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('workout_plans')
+      .select('*')
+      .eq('user_id', userId);
 
-    const plans = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      created_at: doc.data().created_at?.toDate(),
-      updated_at: doc.data().updated_at?.toDate()
-    })) as WorkoutPlan[];
+    if (error) throw error;
+
+    const plans: WorkoutPlan[] = (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      title: row.title,
+      description: row.description,
+      exercises: row.exercises || [],
+      difficulty: row.difficulty,
+      duration: row.duration,
+      benefits: row.benefits || [],
+      schedule: row.schedule || {},
+      isActive: row.is_active,
+      isFavorite: row.is_favorite,
+      created_at: row.created_at ? new Date(row.created_at) : undefined,
+      updated_at: row.updated_at ? new Date(row.updated_at) : undefined
+    }));
 
     return { plans, error: null };
   } catch (error) {
@@ -272,7 +343,10 @@ export const getUserWorkoutPlans = async (userId: string) => {
   }
 };
 
-// User Favorites
+// ============================================================================
+// USER FAVORITES
+// ============================================================================
+
 export interface UserFavorite {
   id?: string;
   userId: string;
@@ -284,11 +358,19 @@ export interface UserFavorite {
 
 export const addToFavorites = async (favorite: Omit<UserFavorite, 'id' | 'created_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'user_favorites'), {
-      ...favorite,
-      created_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('user_favorites')
+      .insert({
+        user_id: favorite.userId,
+        item_id: favorite.itemId,
+        item_type: favorite.itemType,
+        item_title: favorite.itemTitle
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error adding to favorites:', error);
     return { id: null, error };
@@ -297,18 +379,14 @@ export const addToFavorites = async (favorite: Omit<UserFavorite, 'id' | 'create
 
 export const removeFromFavorites = async (userId: string, itemId: string, itemType: string) => {
   try {
-    const q = query(
-      collection(db, 'user_favorites'),
-      where('userId', '==', userId),
-      where('itemId', '==', itemId),
-      where('itemType', '==', itemType)
-    );
-    const querySnapshot = await getDocs(q);
+    const { error } = await supabase
+      .from('user_favorites')
+      .delete()
+      .eq('user_id', userId)
+      .eq('item_id', itemId)
+      .eq('item_type', itemType);
 
-    if (!querySnapshot.empty) {
-      await deleteDoc(querySnapshot.docs[0].ref);
-    }
-
+    if (error) throw error;
     return { error: null };
   } catch (error) {
     console.error('Error removing from favorites:', error);
@@ -318,22 +396,27 @@ export const removeFromFavorites = async (userId: string, itemId: string, itemTy
 
 export const getUserFavorites = async (userId: string, itemType?: string) => {
   try {
-    let q = query(
-      collection(db, 'user_favorites'),
-      where('userId', '==', userId)
-    );
+    let query = supabase
+      .from('user_favorites')
+      .select('*')
+      .eq('user_id', userId);
 
     if (itemType) {
-      q = query(q, where('itemType', '==', itemType));
+      query = query.eq('item_type', itemType);
     }
 
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await query;
 
-    const favorites = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      created_at: doc.data().created_at?.toDate()
-    })) as UserFavorite[];
+    if (error) throw error;
+
+    const favorites: UserFavorite[] = (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      itemId: row.item_id,
+      itemType: row.item_type,
+      itemTitle: row.item_title,
+      created_at: row.created_at ? new Date(row.created_at) : undefined
+    }));
 
     return { favorites, error: null };
   } catch (error) {
@@ -342,7 +425,10 @@ export const getUserFavorites = async (userId: string, itemType?: string) => {
   }
 };
 
-// User Progress
+// ============================================================================
+// USER PROGRESS
+// ============================================================================
+
 export interface UserProgress {
   id?: string;
   userId: string;
@@ -373,12 +459,24 @@ export interface UserProgress {
 
 export const recordProgress = async (progress: Omit<UserProgress, 'id' | 'created_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'user_progress'), {
-      ...progress,
-      date: Timestamp.fromDate(progress.date),
-      created_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('user_progress')
+      .insert({
+        user_id: progress.userId,
+        date: progress.date.toISOString(),
+        weight: progress.weight,
+        body_fat: progress.bodyFat,
+        muscle_mass: progress.muscleMass,
+        measurements: progress.measurements || null,
+        fitness_metrics: progress.fitnessMetrics || null,
+        goals: progress.goals || null,
+        notes: progress.notes
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error recording progress:', error);
     return { id: null, error };
@@ -387,20 +485,28 @@ export const recordProgress = async (progress: Omit<UserProgress, 'id' | 'create
 
 export const getUserProgress = async (userId: string, limit: number = 50) => {
   try {
-    const q = query(
-      collection(db, 'user_progress'),
-      where('userId', '==', userId)
-      // orderBy('date', 'desc'),
-      // limitQuery(limit)
-    );
-    const querySnapshot = await getDocs(q);
+    const { data, error } = await supabase
+      .from('user_progress')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(limit);
 
-    const progress = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: doc.data().date.toDate(),
-      created_at: doc.data().created_at?.toDate()
-    })) as UserProgress[];
+    if (error) throw error;
+
+    const progress: UserProgress[] = (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      date: new Date(row.date),
+      weight: row.weight,
+      bodyFat: row.body_fat,
+      muscleMass: row.muscle_mass,
+      measurements: row.measurements,
+      fitnessMetrics: row.fitness_metrics,
+      goals: row.goals,
+      notes: row.notes,
+      created_at: row.created_at ? new Date(row.created_at) : undefined
+    }));
 
     return { progress, error: null };
   } catch (error) {
@@ -409,7 +515,10 @@ export const getUserProgress = async (userId: string, limit: number = 50) => {
   }
 };
 
-// Nutrition Logs
+// ============================================================================
+// NUTRITION LOGS
+// ============================================================================
+
 export interface NutritionLog {
   id?: string;
   userId: string;
@@ -421,20 +530,30 @@ export interface NutritionLog {
     fat: number;
     fiber?: number;
   };
-  image?: string; // Optional URL or base64 placeholder
-  mealType?: string; // e.g., 'breakfast', 'lunch'
+  image?: string;
+  mealType?: string;
   date: Date;
   created_at?: Date;
 }
 
 export const logNutrition = async (log: Omit<NutritionLog, 'id' | 'created_at'>) => {
   try {
-    const docRef = await addDoc(collection(db, 'nutrition_logs'), {
-      ...log,
-      date: Timestamp.fromDate(log.date),
-      created_at: Timestamp.now()
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('nutrition_logs')
+      .insert({
+        user_id: log.userId,
+        food_name: log.foodName,
+        calories: log.calories,
+        macros: log.macros,
+        image_url: log.image,
+        meal_type: log.mealType || 'lunch',
+        date: log.date.toISOString()
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error logging nutrition:', error);
     return { id: null, error };
@@ -443,60 +562,101 @@ export const logNutrition = async (log: Omit<NutritionLog, 'id' | 'created_at'>)
 
 export const getNutritionLogs = async (userId: string, options?: { since?: Date; limit?: number }) => {
   try {
-    const q = query(collection(db, 'nutrition_logs'), where('userId', '==', userId));
-    const snapshot = await getDocs(q);
-    let logs = snapshot.docs.map(d => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ...data,
-        date: (data.date as any)?.toDate?.() ?? data.date,
-        created_at: (data.created_at as any)?.toDate?.()
-      } as NutritionLog & { id: string };
-    });
+    let query = supabase
+      .from('nutrition_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false });
+
     if (options?.since) {
-      const since = options.since.getTime();
-      logs = logs.filter(l => new Date(l.date).getTime() >= since);
+      query = query.gte('date', options.since.toISOString());
     }
-    logs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    const limited = options?.limit ? logs.slice(0, options.limit) : logs;
-    return { logs: limited, error: null };
-  } catch (e) {
-    console.error('Error fetching nutrition logs:', e);
-    return { logs: [], error: e };
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    const logs: (NutritionLog & { id: string })[] = (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.user_id,
+      foodName: row.food_name,
+      calories: row.calories,
+      macros: row.macros || { protein: 0, carbs: 0, fat: 0 },
+      image: row.image_url,
+      mealType: row.meal_type,
+      date: new Date(row.date),
+      created_at: row.created_at ? new Date(row.created_at) : undefined
+    }));
+
+    return { logs, error: null };
+  } catch (error) {
+    console.error('Error fetching nutrition logs:', error);
+    return { logs: [], error };
   }
 };
 
-/**
- * Save AI-generated recipe to user's collection
- */
+// ============================================================================
+// AI RECIPES
+// ============================================================================
+
 export const saveAiRecipe = async (userId: string, recipe: any) => {
   try {
-    const docRef = await addDoc(collection(db, 'ai_recipes'), {
-      userId,
-      ...recipe,
-      created_at: Timestamp.now(),
-      source: 'ai_generated'
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('ai_recipes')
+      .insert({
+        user_id: userId,
+        title: recipe.title,
+        description: recipe.description,
+        prep_time: recipe.prepTime || recipe.prep_time,
+        calories: recipe.calories,
+        category: recipe.category,
+        dietary_type: recipe.dietaryType || recipe.dietary_type,
+        tags: recipe.tags || [],
+        ingredients: recipe.ingredients || [],
+        steps: recipe.steps || recipe.instructions || [],
+        serving_size: recipe.servingSize,
+        nutrition_facts: recipe.nutritionFacts,
+        chef_note: recipe.chefNote || recipe.agentic_insight,
+        source: 'ai_generated'
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error saving AI recipe:', error);
     return { id: null, error };
   }
 };
 
-/**
- * Save AI-generated workout plan
- */
+// ============================================================================
+// AI WORKOUTS
+// ============================================================================
+
 export const saveAiWorkout = async (userId: string, workout: any) => {
   try {
-    const docRef = await addDoc(collection(db, 'workout_plans'), {
-      userId,
-      ...workout,
-      created_at: Timestamp.now(),
-      source: 'ai_generated'
-    });
-    return { id: docRef.id, error: null };
+    const { data, error } = await supabase
+      .from('workout_plans')
+      .insert({
+        user_id: userId,
+        title: workout.title,
+        description: workout.description,
+        exercises: workout.exercises || [],
+        difficulty: workout.difficulty,
+        duration: workout.duration,
+        benefits: workout.benefits || [],
+        source: 'ai_generated'
+      })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: data?.id || null, error: null };
   } catch (error) {
     console.error('Error saving AI workout:', error);
     return { id: null, error };

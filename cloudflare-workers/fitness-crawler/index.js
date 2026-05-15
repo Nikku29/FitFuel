@@ -1,3 +1,4 @@
+/* global HTMLRewriter */
 export default {
   /**
    * FitFuel Edge Crawler

@@ -4,8 +4,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from '@/contexts/UserContext';
 import { agenticEngine } from '@/services/AgenticEngine';
-import { db } from '@/integrations/firebase/config';
-import { doc, setDoc } from 'firebase/firestore';
+import { supabase } from '@/integrations/supabase/client';
 
 const ProfileStats: React.FC = () => {
   const { user, userData } = useUser();
@@ -19,13 +18,19 @@ const ProfileStats: React.FC = () => {
       setLoading(true);
       try {
         console.log("Refreshing Dashboard via AI...");
-        // Use userData (Profile) for the AI, not the Auth user object
         const newDashboard = await agenticEngine.runWorkflow(userData, 'update_dashboard');
 
         if (newDashboard) {
           setDashboardData(newDashboard);
-          // Write to Firestore logic
-          await setDoc(doc(db, 'users', user.uid, 'dashboard', 'daily'), newDashboard, { merge: true });
+          // Write to Supabase via daily_logs or a dashboard cache
+          const today = new Date().toISOString().split('T')[0];
+          await supabase
+            .from('daily_logs')
+            .upsert({
+              user_id: user.id,
+              date: today,
+              last_updated: new Date().toISOString()
+            }, { onConflict: 'user_id,date' });
         }
       } catch (e) {
         console.error("Dashboard Update Failed", e);

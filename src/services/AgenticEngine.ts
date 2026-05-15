@@ -8,8 +8,6 @@ import {
   MODEL_FAST_CHAT,
   OPENROUTER_HEADERS,
 } from '@/config/aiConfig';
-import { db } from '@/integrations/firebase/config';
-import { doc, setDoc } from 'firebase/firestore';
 
 export type WorkflowIntent = 'generate_workout' | 'generate_meal' | 'update_dashboard' | 'chat';
 

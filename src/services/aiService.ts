@@ -1,5 +1,7 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import app from '@/integrations/firebase/config';
+// ============================================================================
+// AI Service (Supabase-compatible, no Firebase Functions)
+// ============================================================================
+
 import {
   UserProfileSchema,
   WorkoutPlanSchema,
@@ -7,46 +9,35 @@ import {
   type WorkoutPlan,
 } from '@/types/schema';
 
-const functions = getFunctions(app, 'us-central1');
-
-interface GeneratePlanRequest {
-  profile: UserProfile;
-}
-
-export async function generateWorkoutPlan(profile: UserProfile): Promise<WorkoutPlan> {
-  // Validate on the client before sending
-  const validatedProfile = UserProfileSchema.parse(profile);
-
-  const callable = httpsCallable<GeneratePlanRequest, WorkoutPlan>(functions, 'generateWorkoutPlan');
-  const result = await callable({ profile: validatedProfile });
-
-  // Validate the server response as well
-  return WorkoutPlanSchema.parse(result.data);
-}
-
-export async function generateMealPlan(profile: UserProfile): Promise<WorkoutPlan> {
-  // Uses the same schema shape for now; can be replaced with a dedicated MealPlan schema later.
-  const validatedProfile = UserProfileSchema.parse(profile);
-
-  const callable = httpsCallable<GeneratePlanRequest, WorkoutPlan>(functions, 'generateMealPlan');
-  const result = await callable({ profile: validatedProfile });
-
-  return WorkoutPlanSchema.parse(result.data);
-}
-
-// Added default export to fix AIOnboarding.tsx import
+// These functions now use the AgenticEngine directly instead of Firebase Cloud Functions
 import { agenticEngine } from './AgenticEngine';
 import { nutritionScanner } from './vision/nutritionScanner';
 import { AI_CONFIG } from '@/config/aiConfig';
+
+export async function generateWorkoutPlan(profile: UserProfile): Promise<WorkoutPlan> {
+  const validatedProfile = UserProfileSchema.parse(profile);
+  // Use AgenticEngine instead of Firebase Cloud Functions
+  const result = await agenticEngine.runWorkflow(validatedProfile as any, 'generate_workout');
+  return WorkoutPlanSchema.parse(result);
+}
+
+export async function generateMealPlan(profile: UserProfile): Promise<WorkoutPlan> {
+  const validatedProfile = UserProfileSchema.parse(profile);
+  const result = await agenticEngine.runWorkflow(validatedProfile as any, 'generate_meal');
+  return WorkoutPlanSchema.parse(result);
+}
 
 export const aiService = {
   generateWorkoutPlan,
   generateMealPlan,
   chat: async (messages: any[]): Promise<string> => {
     try {
-      const callable = httpsCallable<{messages: any[]}, string>(functions, 'chat');
-      const result = await callable({ messages });
-      return result.data;
+      const result = await agenticEngine.runWorkflow(
+        {} as any,
+        'chat',
+        { chatMessages: messages }
+      );
+      return typeof result === 'string' ? result : JSON.stringify(result);
     } catch (error) {
       console.error("aiService.chat error:", error);
       return "I encountered an error. Please try again.";
@@ -64,8 +55,10 @@ export const aiService = {
   generateFromNaturalLanguage: async (userData: any, query: string, type: 'workout' | 'recipe', mode: string, uid?: string) => {
     const intent = type === 'workout' ? 'generate_workout' : 'generate_meal';
     const result = await agenticEngine.runWorkflow(userData, intent, { customPrompt: query });
-    // AgenticEngine returns a single object for these. The UI expects an array [result]
     return [result];
+  },
+  generateWeeklyPlan: async (userData: any, userId?: string) => {
+    return await agenticEngine.runWorkflow(userData, 'generate_workout', { mode: 'weekly' });
   }
 };
 

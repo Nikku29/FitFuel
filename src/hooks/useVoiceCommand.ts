@@ -31,6 +31,19 @@ export const useVoiceCommand = ({ onCommand, isActive }: UseVoiceCommandProps) =
     const [error, setError] = useState<string | null>(null);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
 
+    const processCommand = (transcript: string) => {
+        // Simple fuzzy matching
+        if (transcript.includes('next') || transcript.includes('skip') || transcript.includes('done')) {
+            onCommand('NEXT');
+        } else if (transcript.includes('pause') || transcript.includes('stop') || transcript.includes('wait')) {
+            onCommand('PAUSE');
+        } else if (transcript.includes('resume') || transcript.includes('start') || transcript.includes('go')) {
+            onCommand('RESUME');
+        } else if (transcript.includes('explain') || transcript.includes('how') || transcript.includes('instructions')) {
+            onCommand('EXPLAIN');
+        }
+    };
+
     // Initialize Recognition
     useEffect(() => {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -102,19 +115,6 @@ export const useVoiceCommand = ({ onCommand, isActive }: UseVoiceCommandProps) =
             setIsListening(false);
         }
     }, [isActive, isListening]);
-
-    const processCommand = (transcript: string) => {
-        // Simple fuzzy matching
-        if (transcript.includes('next') || transcript.includes('skip') || transcript.includes('done')) {
-            onCommand('NEXT');
-        } else if (transcript.includes('pause') || transcript.includes('stop') || transcript.includes('wait')) {
-            onCommand('PAUSE');
-        } else if (transcript.includes('resume') || transcript.includes('start') || transcript.includes('go')) {
-            onCommand('RESUME');
-        } else if (transcript.includes('explain') || transcript.includes('how') || transcript.includes('instructions')) {
-            onCommand('EXPLAIN');
-        }
-    };
 
     return {
         isListening,

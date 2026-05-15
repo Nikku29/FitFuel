@@ -1,4 +1,4 @@
-// Firebase configuration and services
+// Supabase integration - re-exports
 export * from './config';
 export * from './auth';
 export * from './firestore';
@@ -6,14 +6,5 @@ export * from './storage';
 export * from './types';
 export * from './hooks';
 
-// Re-export commonly used Firebase types
-export type { User } from 'firebase/auth';
-export type { 
-  DocumentData, 
-  QuerySnapshot, 
-  DocumentSnapshot 
-} from 'firebase/firestore';
-export type { 
-  UploadTask, 
-  UploadTaskSnapshot 
-} from 'firebase/storage';
+// Re-export Supabase user type for convenience
+export type { User, Session } from '@supabase/supabase-js';

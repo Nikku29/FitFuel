@@ -89,7 +89,7 @@ const FoodCamera: React.FC<FoodCameraProps> = ({ onCapture, onClose }) => {
         return () => {
             isMounted = false;
             if (scannerRef.current) {
-                try { scannerRef.current.clear().catch(console.error); } catch (e) { }
+                try { scannerRef.current.clear().catch(console.error); } catch (e) { /* ignore error */ }
                 scannerRef.current = null;
             }
         };

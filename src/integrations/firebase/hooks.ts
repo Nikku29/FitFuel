@@ -1,6 +1,10 @@
+// ============================================================================
+// Supabase Hooks (replaces Firebase hooks)
+// ============================================================================
+
 import { useState, useEffect } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth } from './config';
+import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@supabase/supabase-js';
 import * as authService from './auth';
 import * as firestoreService from './firestore';
 import * as storageService from './storage';
@@ -11,12 +15,19 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return {
@@ -32,7 +43,7 @@ export const useAuth = () => {
   };
 };
 
-// Firestore hooks
+// Firestore hooks (now Supabase)
 export const useUserProfile = (userId: string | null) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,7 +60,7 @@ export const useUserProfile = (userId: string | null) => {
       setLoading(true);
       const result = await firestoreService.getProfile(userId);
       if (result) {
-        setProfile(result);
+        setProfile(result as any);
         setError(null);
       } else {
         setError('Failed to fetch profile' as any);
@@ -85,7 +96,7 @@ export const useWorkoutLogs = (userId: string | null) => {
       setLoading(true);
       const result = await firestoreService.getUserWorkoutLogs(userId);
       if (result.error) {
-        setError(result.error);
+        setError(result.error as any);
       } else {
         setLogs(result.logs as any);
         setError(null);
@@ -129,7 +140,7 @@ export const useUserFavorites = (userId: string | null, itemType?: string) => {
       setLoading(true);
       const result = await firestoreService.getUserFavorites(userId, itemType);
       if (result.error) {
-        setError(result.error);
+        setError(result.error as any);
       } else {
         setFavorites(result.favorites as any);
         setError(null);
@@ -200,32 +211,21 @@ export const useFileUpload = () => {
   };
 };
 
-// Performance monitoring hook
+// Performance monitoring hook (generic, no Firebase dependency)
 export const usePerformanceMonitoring = () => {
   useEffect(() => {
-    // Track page load time
     const measurePageLoad = () => {
       if ('performance' in window) {
         const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
         if (navigation) {
           const loadTime = navigation.loadEventEnd - navigation.loadEventStart;
           console.log('Page load time:', loadTime, 'ms');
-          
-          // You can send this to Firebase Performance or Analytics
-          if ((window as any).gtag) {
-            (window as any).gtag('event', 'page_load_time', {
-              event_category: 'Performance',
-              value: Math.round(loadTime),
-            });
-          }
         }
       }
     };
 
-    // Measure on component mount
     measurePageLoad();
 
-    // Track memory usage periodically
     const memoryInterval = setInterval(() => {
       if ('memory' in performance) {
         const memory = (performance as any).memory;
@@ -233,11 +233,9 @@ export const usePerformanceMonitoring = () => {
           console.warn('High memory usage detected');
         }
       }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
 
-    return () => {
-      clearInterval(memoryInterval);
-    };
+    return () => clearInterval(memoryInterval);
   }, []);
 };
 
@@ -245,16 +243,6 @@ export const usePerformanceMonitoring = () => {
 export const useErrorTracking = () => {
   const trackError = (error: Error, errorInfo?: any) => {
     console.error('Error tracked:', error, errorInfo);
-    
-    // Send to Firebase Analytics or Crashlytics
-    if ((window as any).gtag) {
-      (window as any).gtag('event', 'exception', {
-        description: error.message,
-        fatal: false,
-      });
-    }
-    
-    // You could also send to Sentry or other error tracking services
   };
 
   return { trackError };

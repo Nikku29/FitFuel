@@ -22,9 +22,9 @@ const pageVariants = {
 };
 
 const pageTransition = {
-  type: "tween",
-  ease: "anticipate",
-  duration: 0.5,
+  type: "spring",
+  stiffness: 260,
+  damping: 20,
 };
 
 const PageTransition: React.FC<PageTransitionProps> = ({ children }) => {

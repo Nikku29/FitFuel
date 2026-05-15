@@ -1,9 +1,11 @@
+// ============================================================================
+// Workout Scheduler (Supabase implementation)
+// ============================================================================
+
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/integrations/firebase/config';
+import { supabase } from '@/integrations/supabase/client';
 import { aiService } from '@/services/aiService';
 import { UserData } from '@/contexts/UserContextTypes';
-
 import { GatekeeperService } from '@/services/GatekeeperService';
 import { workoutData, gymWorkouts, homeWorkouts } from '@/data/workoutData';
 
@@ -31,11 +33,10 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 setLoading(true);
                 setLoadingMessage("Loading free workout plan...");
 
-                // Construct Static Plan
                 const staticPlan = [
                     { day: 'Monday', focus: 'Full Body Hit', ...homeWorkouts[0] },
                     { day: 'Tuesday', focus: 'Cardio Burn', ...workoutData[1] },
-                    { day: 'Wednesday', focus: 'Active Recovery', ...workoutData[11] }, // Recovery
+                    { day: 'Wednesday', focus: 'Active Recovery', ...workoutData[11] },
                     { day: 'Thursday', focus: 'Upper Body Strength', ...gymWorkouts[0] },
                     { day: 'Friday', focus: 'Lower Body Power', ...workoutData[7] },
                     { day: 'Saturday', focus: 'Core & Mobility', ...workoutData[6] },
@@ -43,12 +44,8 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 ];
 
                 setWeekPlan(staticPlan);
-
-                const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
                 const todayIndex = getDayIndex();
-                const todayMatch = staticPlan[todayIndex];
-                setTodaysWorkout(todayMatch);
-
+                setTodaysWorkout(staticPlan[todayIndex]);
                 setLoading(false);
                 return;
             }
@@ -58,25 +55,31 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
             setLoadingMessage("Syncing with cloud...");
 
             try {
-                const planRef = doc(db, 'user_plans', user.uid);
-                const planSnap = await getDoc(planRef);
+                // Check for existing valid plan in Supabase
+                const { data: existingPlan, error: planError } = await supabase
+                    .from('workout_plans')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('status', 'active')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
 
                 let validPlan = false;
                 let currentPlanData = null;
 
-                if (planSnap.exists()) {
-                    const data = planSnap.data();
-                    const createdAt = data.created_at?.toDate();
+                if (!planError && existingPlan) {
+                    const createdAt = new Date(existingPlan.created_at);
                     const now = new Date();
-
                     const diffTime = Math.abs(now.getTime() - createdAt.getTime());
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                    const hasContent = data.days && Array.isArray(data.days) && data.days.some((d: any) => d.exercises && d.exercises.length > 0);
+                    const days = existingPlan.days as any[];
+                    const hasContent = days && Array.isArray(days) && days.some((d: any) => d.exercises && d.exercises.length > 0);
 
                     if (diffDays <= 7 && hasContent) {
                         validPlan = true;
-                        currentPlanData = data.days;
+                        currentPlanData = days;
                         console.log("✅ Valid Weekly Plan Found");
                     } else {
                         console.log("⚠️ Plan Expired, Invalid, or Empty (Regenerating...)");
@@ -86,17 +89,19 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 if (!validPlan) {
                     setLoadingMessage("Building your complete weekly routine...");
 
-                    const newWeekPlan = await aiService.generateWeeklyPlan(userData, user.uid);
-
+                    const newWeekPlan = await aiService.generateWeeklyPlan(userData, user.id);
                     const hasGeneratedContent = newWeekPlan.some((d: any) => d.exercises && d.exercises.length > 0);
 
                     if (hasGeneratedContent) {
-                        await setDoc(planRef, {
-                            userId: user.uid,
-                            days: newWeekPlan,
-                            created_at: Timestamp.now(),
-                            status: 'active'
-                        });
+                        await supabase
+                            .from('workout_plans')
+                            .insert({
+                                user_id: user.id,
+                                title: 'AI Weekly Plan',
+                                days: newWeekPlan,
+                                status: 'active',
+                                is_active: true
+                            });
                         currentPlanData = newWeekPlan;
                     } else {
                         console.error("AI Generation returned empty plan. Using fallback without saving.");
@@ -109,9 +114,7 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
 
                     const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
                     const todayIndex = getDayIndex();
-
                     const todayMatch = currentPlanData.find((d: any) => d.day === todayName) || currentPlanData[todayIndex] || currentPlanData[0];
-
                     setTodaysWorkout(todayMatch);
                 } else {
                     console.error("Critical: Plan data is null or invalid structure.");
@@ -127,7 +130,7 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
         };
 
         checkAndGeneratePlan();
-    }, [user, userData?.tier]); // Add tier dependency to re-run if tier changes
+    }, [user, userData?.tier]);
 
     const regenerateToday = async (adjustmentPrompt: string) => {
         if (!todaysWorkout || !user) return;
@@ -141,7 +144,7 @@ export const useWorkoutScheduler = (user: any, userData: UserData | null) => {
                 `Adjust this workout: "${todaysWorkout.focus}". Request: ${adjustmentPrompt}. Return valid workout JSON.`,
                 'workout',
                 'strict_profile',
-                user.uid
+                user.id
             );
 
             const safeSession = Array.isArray(newSession) ? newSession[0] : newSession;
